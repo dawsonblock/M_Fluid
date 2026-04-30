@@ -660,6 +660,14 @@ async def write_episodic_memories(
     # Step 2: Ingestion process log - batch completion summary
     logger.info(f"[{batch_id}] [OUT] Episodic ingestion complete: episodes={len(by_episode)}, datapoints={len(out)}")
 
+    # ============================================================
+    # Fluid Memory: touch all written nodes (fire-and-forget)
+    # Runs after episodic pipeline, does not block ingestion
+    # ============================================================
+    _asyncio_global.ensure_future(
+        _fluid_touch_episodes(out, summaries, graph_engine)
+    )
+
     return out
 
 
@@ -999,3 +1007,79 @@ async def _process_single_episode_pipeline(
     concept_types = list(entity_type_cache.values()) if entity_type_cache else []
 
     return episode, procedural_compile_tasks, same_entity_edges_count, concept_types
+
+
+# ============================================================
+# Fluid Memory integration helper
+# ============================================================
+
+async def _fluid_touch_episodes(
+    out: List[Any],
+    summaries: "List[FragmentDigest]",
+    graph_engine: "GraphProvider",
+) -> None:
+    """
+    Fire-and-forget task: touch all written episode nodes in the fluid memory engine.
+
+    Extracts node IDs and source metadata from the written episodes and
+    dispatches a FluidUpdateEvent for each episode to the FluidMemoryEngine.
+
+    This runs asynchronously after write_episodic_memories() returns so it
+    never blocks the ingestion pipeline.
+    """
+    try:
+        from m_flow.base_config import get_base_config
+        from m_flow.memory.fluid.engine import FluidMemoryEngine
+        from m_flow.memory.fluid.models import FluidUpdateEvent, get_source_weights
+        from m_flow.memory.fluid.state_store import FluidStateStore
+
+        base_cfg = get_base_config()
+        db_path = base_cfg.system_root_directory + "/databases"
+
+        store = FluidStateStore(db_provider="sqlite", db_path=db_path, db_name="fluid_memory")
+        engine = FluidMemoryEngine(graph_engine, store)
+
+        for node in out:
+            if not isinstance(node, Episode):
+                continue
+
+            # Collect touched node IDs
+            touched_ids: List[str] = [str(node.id)]
+
+            if node.has_facet:
+                for _edge, facet in node.has_facet:
+                    if isinstance(facet, Facet):
+                        touched_ids.append(str(facet.id))
+
+            if node.involves_entity:
+                for _edge, entity in node.involves_entity:
+                    if isinstance(entity, Entity):
+                        touched_ids.append(str(entity.id))
+
+            # Extract source metadata from any linked summary
+            source_id: Optional[str] = None
+            source_type: Optional[str] = None
+            for s in summaries:
+                chunk = getattr(s, "made_from", None)
+                if chunk:
+                    doc = getattr(chunk, "is_part_of", None)
+                    if doc:
+                        source_id = str(getattr(doc, "id", "")) or None
+                        source_type = getattr(doc, "source_type", None) or getattr(doc, "type", None)
+                    break
+
+            trust, legal = get_source_weights(source_type)
+
+            event = FluidUpdateEvent(
+                touched_node_ids=touched_ids,
+                source_id=source_id,
+                source_type=source_type or "unknown",
+                source_trust=trust,
+                salience=0.6,
+                legal_weight=legal,
+            )
+
+            await engine.touch(event)
+
+    except Exception as exc:
+        logger.warning(f"[fluid_memory] touch_episodes failed (non-critical): {exc}")

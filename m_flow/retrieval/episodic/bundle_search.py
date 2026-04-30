@@ -212,6 +212,9 @@ async def episodic_bundle_search(
             rlog.log_complete(0)
             return []
 
+        # Step 9.5: Apply fluid memory score adjustment (boost/penalty)
+        bundles = await _apply_fluid_scores(bundles)
+
         # Apply time bonus to bundles (before sorting)
         time_bonus_stats = None
         if preprocessed.has_time and preprocessed.time_confidence >= cfg.time_conf_min:
@@ -625,6 +628,45 @@ def _compute_facet_cost(
         facet_cost[fid] = best
 
     return facet_cost
+
+
+async def _apply_fluid_scores(bundles: List) -> List:
+    """
+    Apply fluid memory score adjustments to episode bundles.
+
+    Looks up the fluid state for each episode and adjusts the bundle
+    score using fluid_score(). Gracefully no-ops if fluid memory is
+    unavailable or the store has no state for a given episode.
+
+    Args:
+        bundles: List of EpisodeBundle after base scoring
+
+    Returns:
+        Same list with scores mutated in-place
+    """
+    try:
+        from m_flow.base_config import get_base_config
+        from m_flow.memory.fluid.state_store import FluidStateStore
+        from m_flow.memory.fluid.scoring import fluid_score
+
+        base_cfg = get_base_config()
+        db_path = base_cfg.system_root_directory + "/databases"
+
+        store = FluidStateStore(db_provider="sqlite", db_path=db_path, db_name="fluid_memory")
+
+        episode_ids = [b.episode_id for b in bundles]
+        states = await store.get_many(episode_ids)
+        state_map = {s.node_id: s for s in states if s.activation > 0.0}
+
+        for bundle in bundles:
+            state = state_map.get(bundle.episode_id)
+            if state:
+                bundle.score = fluid_score(bundle.score, state)
+
+    except Exception:
+        pass
+
+    return bundles
 
 
 def _apply_time_bonus_to_bundles(
