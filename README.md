@@ -14,7 +14,7 @@ Retrieval through reasoning and association — M-flow operates like a cognitive
 [OpenClaw Skill](https://clawhub.ai/flowelement-alexunbridled/mflow-memory) ·
 [Contact](mailto:contact@xinliuyuansu.com)
 
-[![Tests](https://img.shields.io/badge/tests-963%20passed-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/tests-1198%20passed-brightgreen)](#testing)
 [![Python](https://img.shields.io/badge/python-3.10–3.13-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
@@ -261,6 +261,7 @@ Per-category breakdowns, reproduction scripts, raw data, and methodology for all
 | | |
 |---------|-------------|
 | **Episodic + Procedural memory** | Hierarchical recall for facts and step-by-step knowledge |
+| **Fluid Memory** | Mutable operational state layer — activation, decay, and contradiction pressure update dynamically after every write |
 | **5 retrieval modes** | Episodic, Procedural, Triplet Completion, Lexical, Cypher |
 | **50+ file formats** | PDFs, DOCX, HTML, Markdown, images, audio, and more |
 | **Multi-DB support** | LanceDB, Neo4j, PostgreSQL/pgvector, ChromaDB, KùzuDB, Pinecone |
@@ -334,12 +335,66 @@ mflow -ui          # Launch the local web console
 │               │     │   parsing)    │     │  embeddings)  │
 └───────────────┘     └───────────────┘     └───────┬───────┘
                                                     │
+                                            ┌───────▼───────┐
+                                            │ Fluid Memory  │
+                                            │ (activation,  │
+                                            │ decay, ripple)│
+                                            └───────┬───────┘
+                                                    │
                       ┌───────────────┐     ┌───────▼───────┐
                       │    Search     │◀────│     Load      │
                       │  (graph-routed│     │   (graph +    │
                       │  bundle search│     │  vector DB)   │
                       └───────────────┘     └───────────────┘
 ```
+
+### Fluid Memory
+
+M-flow maintains three distinct layers of memory, each with different mutability rules:
+
+| Layer | Changes? | Examples |
+|-------|----------|----------|
+| **Raw evidence** | Never | ContentFragments, source text |
+| **Graph links** | Carefully | Episode–Facet edges, Entity merges |
+| **Fluid state** | Constantly | Activation, confidence, decay, contradiction pressure |
+
+The **Fluid Memory module** (`m_flow/memory/fluid/`) is the mutable operational state layer. It runs automatically after every episodic write and before retrieval scoring:
+
+1. **Touch** — each written Episode, Facet, and Entity node gets an activation boost and has its trust, salience, and legal weight updated from the source.
+2. **Ripple** — activation spreads through graph edges up to depth 2 (BFS), so touching one node slightly activates its neighbors.
+3. **Decay** — activation decreases exponentially over time, simulating natural forgetting.
+4. **Contradiction pressure** — when sources conflict, pressure accumulates on disputed nodes and penalizes their retrieval scores.
+5. **Retrieval boost** — at query time, `fluid_score()` adjusts each bundle's cost using the node's current fluid state.
+
+```text
+Episodic Write
+    └─▶ fluid_engine.touch(episode + facets + entities)
+            ├─ activation boost
+            ├─ activation ripple (depth-2 BFS)
+            ├─ decay applied
+            └─ contradiction pressure updated
+
+Retrieval (bundle_search)
+    └─▶ fluid_score(base_cost, fluid_state)
+            boost = activation·0.25 + confidence·0.25 + source_trust·0.15
+                  + recency·0.10   + salience·0.10   + legal_weight·0.10
+                  - contradiction·0.20
+```
+
+Fluid state is stored in a SQLite/Postgres table (`fluid_memory_state`) via SQLAlchemy async ORM. All mutations are recorded in `fluid_audit_log` for traceability. The engine is entirely optional — if unavailable it silently no-ops so ingestion and retrieval are never blocked.
+
+**Source trust presets (legal/crime use case):**
+
+| Source type | trust | legal weight |
+|-------------|:-----:|:------------:|
+| `court_record` | 0.95 | 1.00 |
+| `government_data` | 0.85 | 0.80 |
+| `police_release` | 0.80 | 0.70 |
+| `mainstream_news` | 0.60 | 0.30 |
+| `blog_social` | 0.25 | 0.05 |
+| `unknown` | 0.10 | 0.00 |
+
+See [`m_flow/memory/fluid/README.md`](m_flow/memory/fluid/README.md) for the full API reference.
 
 ## Project Layout
 
@@ -349,7 +404,10 @@ m_flow/              Core Python library & API
 ├── cli/             Command-line interface (`mflow`)
 ├── adapters/        DB adapters (graph, vector, cache)
 ├── core/            Domain models (Episode, Facet, FacetPoint, …)
-├── memory/          Memory processing (episodic, procedural)
+├── memory/          Memory processing
+│   ├── episodic/    Episodic write pipeline
+│   ├── procedural/  Procedural memory extraction
+│   └── fluid/       Fluid Memory — mutable operational state layer
 ├── retrieval/       Search & retrieval algorithms
 ├── pipeline/        Composable pipeline tasks & orchestration
 ├── auth/            Authentication & multi-tenancy
