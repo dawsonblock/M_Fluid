@@ -213,7 +213,14 @@ async def episodic_bundle_search(
             return []
 
         # Step 9.5: Apply fluid memory score adjustment (boost/penalty)
-        bundles = await _apply_fluid_scores(bundles)
+        # Gated by MFLOW_FLUID_ENABLE and MFLOW_FLUID_ON_RETRIEVAL.
+        try:
+            from m_flow.memory.fluid.config import get_fluid_config as _get_fluid_cfg
+            _fcfg = _get_fluid_cfg()
+            if _fcfg.enable and _fcfg.enable_on_retrieval:
+                bundles = await _apply_fluid_scores(bundles)
+        except Exception as _fluid_import_exc:
+            logger.warning("[fluid_memory] retrieval config check failed: %s", _fluid_import_exc)
 
         # Apply time bonus to bundles (before sorting)
         time_bonus_stats = None
@@ -634,9 +641,9 @@ async def _apply_fluid_scores(bundles: List) -> List:
     """
     Apply fluid memory score adjustments to episode bundles.
 
-    Looks up the fluid state for each episode and adjusts the bundle
-    score using fluid_score(). Gracefully no-ops if fluid memory is
-    unavailable or the store has no state for a given episode.
+    Looks up the fluid state for each episode and adjusts each bundle
+    score using bounded fluid_score().  Failures are logged visibly;
+    the original bundles are always returned intact.
 
     Args:
         bundles: List of EpisodeBundle after base scoring
@@ -646,25 +653,30 @@ async def _apply_fluid_scores(bundles: List) -> List:
     """
     try:
         from m_flow.base_config import get_base_config
+        from m_flow.memory.fluid.config import get_fluid_config
         from m_flow.memory.fluid.state_store import FluidStateStore
-        from m_flow.memory.fluid.scoring import fluid_score
+        from m_flow.memory.fluid.service_interface import LocalFluidMemoryService
 
+        fluid_cfg = get_fluid_config()
         base_cfg = get_base_config()
         db_path = base_cfg.system_root_directory + "/databases"
 
-        store = FluidStateStore(db_provider="sqlite", db_path=db_path, db_name="fluid_memory")
+        store = FluidStateStore(
+            db_provider=fluid_cfg.db_provider,
+            db_path=fluid_cfg.db_path or db_path,
+            db_name=fluid_cfg.db_name,
+            db_host=fluid_cfg.db_host,
+            db_port=fluid_cfg.db_port,
+            db_username=fluid_cfg.db_username,
+            db_password=fluid_cfg.db_password,
+        )
 
-        episode_ids = [b.episode_id for b in bundles]
-        states = await store.get_many(episode_ids)
-        state_map = {s.node_id: s for s in states if s.activation > 0.0}
+        # graph_engine not needed for score-only path; pass None
+        service = LocalFluidMemoryService(graph_engine=None, store=store)
+        bundles = await service.apply_fluid_scores(bundles)
 
-        for bundle in bundles:
-            state = state_map.get(bundle.episode_id)
-            if state:
-                bundle.score = fluid_score(bundle.score, state)
-
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("[fluid_memory] _apply_fluid_scores failed: %s", type(exc).__name__ + ": " + str(exc))
 
     return bundles
 

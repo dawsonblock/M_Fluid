@@ -2,126 +2,173 @@
 Fluid Memory Scoring
 
 Integration with retrieval scoring system.
-Provides fluid_score() function to boost/penalize retrieval scores.
+Provides fluid_score() to boost/penalize retrieval scores.
+
+Scoring is bounded to prevent the fluid layer from dominating:
+  - Raw boost is computed from weighted state factors.
+  - Boost is capped at min(max_boost_impact, base_score * max_boost_fraction).
+  - Default caps: absolute 0.15, relative 30% of base score.
+
+This means fluid memory cannot change a score by more than 30% or
+0.15 absolute units, whichever is smaller.  The base retrieval signal
+always remains dominant.
 """
 
-from typing import Optional
+from typing import Optional, Dict
 from m_flow.memory.fluid.models import FluidMemoryState
+
+_DEFAULT_WEIGHTS: Dict[str, float] = {
+    "activation": 0.25,
+    "confidence": 0.25,
+    "source_trust": 0.15,
+    "recency_score": 0.10,
+    "salience": 0.10,
+    "legal_weight": 0.10,
+    "contradiction_pressure": 0.20,  # applied as negative
+}
+
+_DEFAULT_MAX_IMPACT = 0.15
+_DEFAULT_MAX_FRACTION = 0.30
+
+
+def compute_fluid_boost(
+    state: FluidMemoryState,
+    custom_weights: Optional[Dict[str, float]] = None,
+) -> float:
+    """
+    Compute raw fluid boost (unbounded).
+
+    Args:
+        state: Fluid memory state
+        custom_weights: Optional weight overrides
+
+    Returns:
+        Raw boost value (can be positive or negative, unbounded)
+    """
+    w = dict(_DEFAULT_WEIGHTS)
+    if custom_weights:
+        w.update(custom_weights)
+
+    return (
+        state.activation * w["activation"]
+        + state.confidence * w["confidence"]
+        + state.source_trust * w["source_trust"]
+        + state.recency_score * w["recency_score"]
+        + state.salience * w["salience"]
+        + state.legal_weight * w["legal_weight"]
+        - state.contradiction_pressure * w["contradiction_pressure"]
+    )
+
+
+def _bound_boost(
+    raw_boost: float,
+    base_score: float,
+    max_impact: float = _DEFAULT_MAX_IMPACT,
+    max_fraction: float = _DEFAULT_MAX_FRACTION,
+) -> float:
+    """
+    Apply bounds to a raw boost value.
+
+    Cap at min(max_impact, |base_score| * max_fraction),
+    preserving the sign of the boost.
+    """
+    cap = min(max_impact, abs(base_score) * max_fraction)
+    return max(-cap, min(cap, raw_boost))
 
 
 def fluid_score(
-    base_retrieval_score: float, 
+    base_retrieval_score: float,
     state: FluidMemoryState,
+    max_impact: float = _DEFAULT_MAX_IMPACT,
+    max_fraction: float = _DEFAULT_MAX_FRACTION,
+    custom_weights: Optional[Dict[str, float]] = None,
 ) -> float:
     """
-    Compute fluid-boosted retrieval score.
-    
-    Combines base retrieval score (from vector similarity) with
-    fluid state factors (activation, confidence, trust, etc.).
-    
-    Scoring weights:
-    - activation: 0.25 (currently active nodes get boost)
-    - confidence: 0.25 (high confidence nodes get boost)
-    - source_trust: 0.15 (trusted sources get boost)
-    - recency_score: 0.10 (recent nodes get boost)
-    - salience: 0.10 (salient nodes get boost)
-    - legal_weight: 0.10 (legal docs get boost)
-    - contradiction_pressure: -0.20 (contradicted nodes get penalty)
-    
+    Compute fluid-adjusted retrieval score (distance-based, lower = better).
+
+    The boost is bounded so fluid memory never dominates base retrieval.
+
     Args:
-        base_retrieval_score: Base score from vector similarity (lower is better)
+        base_retrieval_score: Base distance score (lower is better)
         state: Fluid memory state for the node
-        
+        max_impact: Absolute cap on adjustment (default 0.15)
+        max_fraction: Relative cap as fraction of base score (default 0.30)
+        custom_weights: Optional weight overrides
+
     Returns:
         Adjusted score (lower is better)
     """
-    boost = (
-        state.activation * 0.25
-        + state.confidence * 0.25
-        + state.source_trust * 0.15
-        + state.recency_score * 0.10
-        + state.salience * 0.10
-        + state.legal_weight * 0.10
-        - state.contradiction_pressure * 0.20
-    )
-    
-    # Apply boost to base score
-    # For distance-based scores (lower=better), subtract boost
-    # For similarity scores (higher=better), add boost
-    return base_retrieval_score - boost
+    raw = compute_fluid_boost(state, custom_weights)
+    bounded = _bound_boost(raw, base_retrieval_score, max_impact, max_fraction)
+    return base_retrieval_score - bounded
 
 
 def fluid_score_similarity(
     base_similarity_score: float,
     state: FluidMemoryState,
+    max_impact: float = _DEFAULT_MAX_IMPACT,
+    max_fraction: float = _DEFAULT_MAX_FRACTION,
+    custom_weights: Optional[Dict[str, float]] = None,
 ) -> float:
     """
-    Compute fluid-boosted similarity score.
-    
-    Version for similarity-based scoring where higher is better.
-    
+    Compute fluid-adjusted similarity score (higher = better).
+
     Args:
         base_similarity_score: Base similarity score (higher is better)
         state: Fluid memory state for the node
-        
+        max_impact: Absolute cap on adjustment
+        max_fraction: Relative cap as fraction of base score
+
     Returns:
         Adjusted similarity score (higher is better)
     """
-    boost = (
-        state.activation * 0.25
-        + state.confidence * 0.25
-        + state.source_trust * 0.15
-        + state.recency_score * 0.10
-        + state.salience * 0.10
-        + state.legal_weight * 0.10
-        - state.contradiction_pressure * 0.20
-    )
-    
-    return base_similarity_score + boost
+    raw = compute_fluid_boost(state, custom_weights)
+    bounded = _bound_boost(raw, base_similarity_score, max_impact, max_fraction)
+    return base_similarity_score + bounded
 
 
-def compute_fluid_boost(
+def explain_fluid_score(
+    base_retrieval_score: float,
     state: FluidMemoryState,
-    custom_weights: Optional[dict] = None,
-) -> float:
+    max_impact: float = _DEFAULT_MAX_IMPACT,
+    max_fraction: float = _DEFAULT_MAX_FRACTION,
+) -> Dict[str, float]:
     """
-    Compute just the fluid boost value (without applying to score).
-    
-    Useful for debugging, logging, or custom scoring integration.
-    
-    Args:
-        state: Fluid memory state
-        custom_weights: Optional custom weights dict with keys:
-            activation, confidence, source_trust, recency_score,
-            salience, legal_weight, contradiction_pressure
-            
-    Returns:
-        Computed boost value (can be positive or negative)
+    Return a detailed breakdown of the fluid score adjustment.
+
+    Useful for debugging, logging, and evaluation.
+
+    Returns a dict with:
+        base_score          — original score before fluid adjustment
+        final_score         — score after bounded boost applied
+        raw_boost           — unbounded boost from state factors
+        bounded_boost       — clamped boost actually applied
+        cap_applied         — cap value used
+        components          — individual factor contributions
     """
-    weights = {
-        "activation": 0.25,
-        "confidence": 0.25,
-        "source_trust": 0.15,
-        "recency_score": 0.10,
-        "salience": 0.10,
-        "legal_weight": 0.10,
-        "contradiction_pressure": 0.20,  # Applied as negative
+    w = _DEFAULT_WEIGHTS
+    components = {
+        "activation":            state.activation * w["activation"],
+        "confidence":            state.confidence * w["confidence"],
+        "source_trust":          state.source_trust * w["source_trust"],
+        "recency_score":         state.recency_score * w["recency_score"],
+        "salience":              state.salience * w["salience"],
+        "legal_weight":          state.legal_weight * w["legal_weight"],
+        "contradiction_penalty": -(state.contradiction_pressure * w["contradiction_pressure"]),
     }
-    
-    if custom_weights:
-        weights.update(custom_weights)
-    
-    boost = (
-        state.activation * weights["activation"]
-        + state.confidence * weights["confidence"]
-        + state.source_trust * weights["source_trust"]
-        + state.recency_score * weights["recency_score"]
-        + state.salience * weights["salience"]
-        + state.legal_weight * weights["legal_weight"]
-        - state.contradiction_pressure * weights["contradiction_pressure"]
-    )
-    
-    return boost
+    raw = sum(components.values())
+    cap = min(max_impact, abs(base_retrieval_score) * max_fraction)
+    bounded = max(-cap, min(cap, raw))
+    final = base_retrieval_score - bounded
+
+    return {
+        "base_score": base_retrieval_score,
+        "final_score": final,
+        "raw_boost": raw,
+        "bounded_boost": bounded,
+        "cap_applied": cap,
+        "components": components,
+    }
 
 
 def should_boost_retrieval(
@@ -130,24 +177,13 @@ def should_boost_retrieval(
     min_confidence: float = 0.3,
 ) -> bool:
     """
-    Determine if a node should get retrieval boost.
-    
-    Quick check to filter low-quality nodes from boosting.
-    
-    Args:
-        state: Fluid memory state
-        min_activation: Minimum activation to qualify
-        min_confidence: Minimum confidence to qualify
-        
-    Returns:
-        True if node should be boosted
+    Quick eligibility check before applying fluid score.
+
+    Returns False for heavily-contradicted or effectively-inactive nodes
+    so the scorer can skip them entirely for performance.
     """
-    # Don't boost nodes with high contradiction pressure
     if state.contradiction_pressure > 0.5:
         return False
-    
-    # Require some minimum activation or confidence
     if state.activation < min_activation and state.confidence < min_confidence:
         return False
-    
     return True

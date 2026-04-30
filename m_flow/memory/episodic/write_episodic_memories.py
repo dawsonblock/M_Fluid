@@ -661,12 +661,17 @@ async def write_episodic_memories(
     logger.info(f"[{batch_id}] [OUT] Episodic ingestion complete: episodes={len(by_episode)}, datapoints={len(out)}")
 
     # ============================================================
-    # Fluid Memory: touch all written nodes (fire-and-forget)
-    # Runs after episodic pipeline, does not block ingestion
+    # Fluid Memory: touch all written nodes (synchronous, non-blocking)
+    # Runs after episodic pipeline. Failures are logged, never raised.
+    # Gated by MFLOW_FLUID_ENABLE and MFLOW_FLUID_ON_WRITE env vars.
     # ============================================================
-    _asyncio_global.ensure_future(
-        _fluid_touch_episodes(out, summaries, graph_engine)
-    )
+    try:
+        from m_flow.memory.fluid.config import get_fluid_config
+        _fluid_cfg = get_fluid_config()
+        if _fluid_cfg.enable and _fluid_cfg.enable_on_write:
+            await _fluid_touch_episodes(out, summaries, graph_engine)
+    except Exception as _fluid_exc:
+        logger.warning("[fluid_memory] write integration failed (non-critical): %s", _fluid_exc)
 
     return out
 
@@ -1019,67 +1024,82 @@ async def _fluid_touch_episodes(
     graph_engine: "GraphProvider",
 ) -> None:
     """
-    Fire-and-forget task: touch all written episode nodes in the fluid memory engine.
+    Touch all written episode nodes in the fluid memory engine.
 
     Extracts node IDs and source metadata from the written episodes and
-    dispatches a FluidUpdateEvent for each episode to the FluidMemoryEngine.
+    dispatches a FluidUpdateEvent for each episode to the fluid service.
 
-    This runs asynchronously after write_episodic_memories() returns so it
-    never blocks the ingestion pipeline.
+    Called synchronously (with await) from write_episodic_memories() after
+    the episodic pipeline completes.  Any exception is caught by the caller
+    so ingestion is never blocked.
     """
-    try:
-        from m_flow.base_config import get_base_config
-        from m_flow.memory.fluid.engine import FluidMemoryEngine
-        from m_flow.memory.fluid.models import FluidUpdateEvent, get_source_weights
-        from m_flow.memory.fluid.state_store import FluidStateStore
+    from m_flow.base_config import get_base_config
+    from m_flow.memory.fluid.config import get_fluid_config
+    from m_flow.memory.fluid.models import FluidUpdateEvent, get_source_weights
+    from m_flow.memory.fluid.state_store import FluidStateStore
+    from m_flow.memory.fluid.service_interface import LocalFluidMemoryService
 
-        base_cfg = get_base_config()
-        db_path = base_cfg.system_root_directory + "/databases"
+    fluid_cfg = get_fluid_config()
+    base_cfg = get_base_config()
+    db_path = base_cfg.system_root_directory + "/databases"
 
-        store = FluidStateStore(db_provider="sqlite", db_path=db_path, db_name="fluid_memory")
-        engine = FluidMemoryEngine(graph_engine, store)
+    store = FluidStateStore(
+        db_provider=fluid_cfg.db_provider,
+        db_path=fluid_cfg.db_path or db_path,
+        db_name=fluid_cfg.db_name,
+        db_host=fluid_cfg.db_host,
+        db_port=fluid_cfg.db_port,
+        db_username=fluid_cfg.db_username,
+        db_password=fluid_cfg.db_password,
+    )
+    service = LocalFluidMemoryService(graph_engine, store)
 
-        for node in out:
-            if not isinstance(node, Episode):
-                continue
+    for node in out:
+        if not isinstance(node, Episode):
+            continue
 
-            # Collect touched node IDs
-            touched_ids: List[str] = [str(node.id)]
+        # Collect touched node IDs
+        touched_ids: List[str] = [str(node.id)]
 
-            if node.has_facet:
-                for _edge, facet in node.has_facet:
-                    if isinstance(facet, Facet):
-                        touched_ids.append(str(facet.id))
+        if node.has_facet:
+            for _edge, facet in node.has_facet:
+                if isinstance(facet, Facet):
+                    touched_ids.append(str(facet.id))
 
-            if node.involves_entity:
-                for _edge, entity in node.involves_entity:
-                    if isinstance(entity, Entity):
-                        touched_ids.append(str(entity.id))
+        if node.involves_entity:
+            for _edge, entity in node.involves_entity:
+                if isinstance(entity, Entity):
+                    touched_ids.append(str(entity.id))
 
-            # Extract source metadata from any linked summary
-            source_id: Optional[str] = None
-            source_type: Optional[str] = None
-            for s in summaries:
-                chunk = getattr(s, "made_from", None)
-                if chunk:
-                    doc = getattr(chunk, "is_part_of", None)
-                    if doc:
-                        source_id = str(getattr(doc, "id", "")) or None
-                        source_type = getattr(doc, "source_type", None) or getattr(doc, "type", None)
-                    break
+        # Extract source metadata from any linked summary
+        source_id: Optional[str] = None
+        source_type: Optional[str] = None
+        for s in summaries:
+            chunk = getattr(s, "made_from", None)
+            if chunk:
+                doc = getattr(chunk, "is_part_of", None)
+                if doc:
+                    source_id = str(getattr(doc, "id", "")) or None
+                    source_type = getattr(doc, "source_type", None) or getattr(doc, "type", None)
+                break
 
-            trust, legal = get_source_weights(source_type)
+        trust, legal = get_source_weights(source_type)
 
-            event = FluidUpdateEvent(
-                touched_node_ids=touched_ids,
-                source_id=source_id,
-                source_type=source_type or "unknown",
-                source_trust=trust,
-                salience=0.6,
-                legal_weight=legal,
-            )
+        # Determine decay lane from source type
+        decay_lane = "normal"
+        if source_type and any(k in source_type.lower() for k in ("court", "government", "police")):
+            decay_lane = "legal"
+        elif source_type and any(k in source_type.lower() for k in ("blog", "social")):
+            decay_lane = "short_term"
 
-            await engine.touch(event)
+        event = FluidUpdateEvent(
+            touched_node_ids=touched_ids,
+            source_id=source_id,
+            source_type=source_type or "unknown",
+            source_trust=trust,
+            salience=0.6,
+            legal_weight=legal,
+            decay_lane=decay_lane,
+        )
 
-    except Exception as exc:
-        logger.warning(f"[fluid_memory] touch_episodes failed (non-critical): {exc}")
+        await service.touch(event)

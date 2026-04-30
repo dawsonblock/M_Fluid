@@ -16,6 +16,7 @@ from sqlalchemy import (
     Float,
     Integer,
     DateTime,
+    Text,
     select,
     update,
     insert,
@@ -30,15 +31,16 @@ from m_flow.memory.fluid.models import FluidMemoryState
 
 class FluidStateRecord(ModelBase):
     """SQLAlchemy model for fluid memory state table."""
-    
+
     __tablename__ = "fluid_memory_state"
-    
+
     node_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     activation: Mapped[float] = mapped_column(Float, default=0.0)
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
     source_trust: Mapped[float] = mapped_column(Float, default=0.5)
     recency_score: Mapped[float] = mapped_column(Float, default=1.0)
-    decay_rate: Mapped[float] = mapped_column(Float, default=0.01)
+    decay_rate: Mapped[float] = mapped_column(Float, default=0.02)  # per-day
+    decay_lane: Mapped[str] = mapped_column(String(20), default="normal")
     reinforcement_count: Mapped[int] = mapped_column(Integer, default=0)
     contradiction_pressure: Mapped[float] = mapped_column(Float, default=0.0)
     salience: Mapped[float] = mapped_column(Float, default=0.5)
@@ -49,6 +51,22 @@ class FluidStateRecord(ModelBase):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+
+class ClaimConflictRecord(ModelBase):
+    """SQLAlchemy model for detected claim conflicts."""
+
+    __tablename__ = "fluid_claim_conflicts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    node_id_a: Mapped[str] = mapped_column(String(255), index=True)
+    node_id_b: Mapped[str] = mapped_column(String(255), index=True)
+    source_id_a: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source_id_b: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    conflict_reason: Mapped[str] = mapped_column(Text, default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    detected_at: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 @dataclass
@@ -106,6 +124,7 @@ class FluidStateStore:
             source_trust=record.source_trust,
             recency_score=record.recency_score,
             decay_rate=record.decay_rate,
+            decay_lane=record.decay_lane,
             reinforcement_count=record.reinforcement_count,
             contradiction_pressure=record.contradiction_pressure,
             salience=record.salience,
@@ -123,6 +142,7 @@ class FluidStateStore:
             "source_trust": state.source_trust,
             "recency_score": state.recency_score,
             "decay_rate": state.decay_rate,
+            "decay_lane": state.decay_lane,
             "reinforcement_count": state.reinforcement_count,
             "contradiction_pressure": state.contradiction_pressure,
             "salience": state.salience,
@@ -304,3 +324,25 @@ class FluidStateStore:
             )
             records = result.scalars().all()
             return [self._record_to_state(r) for r in records]
+
+    async def save_claim_conflict(self, conflict) -> None:
+        """
+        Persist a ClaimConflict to the fluid_claim_conflicts table.
+
+        Args:
+            conflict: ClaimConflict model instance
+        """
+        await self._ensure_tables()
+        async with self._engine.sessionmaker() as session:
+            await session.execute(
+                insert(ClaimConflictRecord).values(
+                    node_id_a=conflict.node_id_a,
+                    node_id_b=conflict.node_id_b,
+                    source_id_a=conflict.source_id_a,
+                    source_id_b=conflict.source_id_b,
+                    conflict_reason=conflict.conflict_reason,
+                    confidence=conflict.confidence,
+                    detected_at=conflict.detected_at,
+                )
+            )
+            await session.commit()

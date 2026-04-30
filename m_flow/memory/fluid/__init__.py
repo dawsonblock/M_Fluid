@@ -39,14 +39,14 @@ Design Principles:
 from m_flow.memory.fluid.models import (
     FluidMemoryState,
     FluidUpdateEvent,
+    ClaimConflict,
     get_source_weights,
-    SOURCE_TRUST_WEIGHTS,
-    LEGAL_WEIGHT_WEIGHTS,
 )
 from m_flow.memory.fluid.scoring import (
     fluid_score,
     fluid_score_similarity,
     compute_fluid_boost,
+    explain_fluid_score,
     should_boost_retrieval,
 )
 from m_flow.memory.fluid.state_store import (
@@ -56,31 +56,48 @@ from m_flow.memory.fluid.state_store import (
 from m_flow.memory.fluid.engine import FluidMemoryEngine
 from m_flow.memory.fluid.audit import (
     FluidAuditLogger,
+    FluidProvenance,
     AuditEventType,
+)
+from m_flow.memory.fluid.config import FluidMemoryConfig, get_fluid_config
+from m_flow.memory.fluid.service_interface import (
+    FluidMemoryServiceInterface,
+    LocalFluidMemoryService,
+    RemoteFluidMemoryService,
 )
 
 __all__ = [
     # Models
     "FluidMemoryState",
     "FluidUpdateEvent",
+    "ClaimConflict",
     "ActivationMergeUpdate",
-    
-    # Source weights
+
+    # Source weights (sync shim)
     "get_source_weights",
-    "SOURCE_TRUST_WEIGHTS",
-    "LEGAL_WEIGHT_WEIGHTS",
-    
+
     # Scoring
     "fluid_score",
     "fluid_score_similarity",
     "compute_fluid_boost",
+    "explain_fluid_score",
     "should_boost_retrieval",
-    
+
     # Engine and Store
     "FluidMemoryEngine",
     "FluidStateStore",
-    
-    # Audit
+
+    # Audit + Provenance
     "FluidAuditLogger",
+    "FluidProvenance",
     "AuditEventType",
+
+    # Config
+    "FluidMemoryConfig",
+    "get_fluid_config",
+
+    # Service interface
+    "FluidMemoryServiceInterface",
+    "LocalFluidMemoryService",
+    "RemoteFluidMemoryService",
 ]

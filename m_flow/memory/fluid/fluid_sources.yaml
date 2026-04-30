@@ -1,0 +1,71 @@
+# Fluid Memory — Default Source Trust Registry
+#
+# These are the baseline presets shipped with the package.
+# Override any entry by adding a row to the fluid_source_registry DB table
+# at runtime (no restart required).
+#
+# Fields per source:
+#   trust        [0.0–1.0]  Base trust weight applied to fluid state
+#   legal_weight [0.0–1.0]  Weight for legal/evidential scoring
+#   decay_lane   string     "short_term" | "normal" | "legal"
+#                           Decay rates (per day):
+#                             short_term = 0.25
+#                             normal     = 0.02
+#                             legal      = 0.002
+#   description  string     Human-readable note
+
+sources:
+
+  court_record:
+    trust: 0.95
+    legal_weight: 1.00
+    decay_lane: legal
+    description: "Court judgments, orders, official court records"
+
+  government_data:
+    trust: 0.85
+    legal_weight: 0.80
+    decay_lane: legal
+    description: "Government datasets, official publications"
+
+  police_release:
+    trust: 0.80
+    legal_weight: 0.70
+    decay_lane: legal
+    description: "Official police press releases and statements"
+
+  academic_paper:
+    trust: 0.75
+    legal_weight: 0.40
+    decay_lane: normal
+    description: "Peer-reviewed academic publications"
+
+  expert_report:
+    trust: 0.70
+    legal_weight: 0.50
+    decay_lane: normal
+    description: "Expert witness reports and professional assessments"
+
+  witness_statement:
+    trust: 0.50
+    legal_weight: 0.40
+    decay_lane: normal
+    description: "Witness statements and depositions"
+
+  mainstream_news:
+    trust: 0.60
+    legal_weight: 0.30
+    decay_lane: normal
+    description: "Established news organisations"
+
+  blog_social:
+    trust: 0.25
+    legal_weight: 0.05
+    decay_lane: short_term
+    description: "Blogs, social media, unverified sources"
+
+  unknown:
+    trust: 0.10
+    legal_weight: 0.00
+    decay_lane: normal
+    description: "Unclassified or unknown source type"

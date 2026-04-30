@@ -3,11 +3,46 @@ Fluid Memory Decay
 
 Handles temporal decay of activation values.
 Activation naturally decreases over time to simulate forgetting.
+
+Time unit: DAYS (not seconds).
+Decay affects only activation and recency_score.
+Source trust, confidence, and legal_weight never decay.
+
+Decay lanes (per-day rates):
+    SHORT_TERM_DECAY = 0.25   # temporary attention — loses ~22% per day
+    NORMAL_DECAY     = 0.02   # standard memory     — loses ~2% per day
+    LEGAL_DECAY      = 0.002  # legal evidence      — loses ~0.2% per day
+
+Minimum activation floor: 0.05 (nodes never go fully dark).
 """
 
+import math
 from time import time
 from typing import List, Optional
 from m_flow.memory.fluid.models import FluidMemoryState
+
+_SECONDS_PER_DAY = 86400.0
+
+SHORT_TERM_DECAY = 0.25
+NORMAL_DECAY = 0.02
+LEGAL_DECAY = 0.002
+
+_LANE_RATES = {
+    "short_term": SHORT_TERM_DECAY,
+    "normal": NORMAL_DECAY,
+    "legal": LEGAL_DECAY,
+}
+
+DEFAULT_MIN_ACTIVATION = 0.05
+DEFAULT_RECENCY_HALF_LIFE_DAYS = 1.0   # recency_score halves every 24 h
+
+
+def _effective_decay_rate(state: FluidMemoryState) -> float:
+    """Return the per-day decay rate, preferring the lane over the raw field."""
+    lane_rate = _LANE_RATES.get(state.decay_lane)
+    if lane_rate is not None:
+        return lane_rate
+    return state.decay_rate
 
 
 def compute_decayed_activation(
@@ -15,92 +50,91 @@ def compute_decayed_activation(
     last_touched: float,
     decay_rate: float,
     now: Optional[float] = None,
+    min_activation: float = DEFAULT_MIN_ACTIVATION,
 ) -> float:
     """
     Compute decayed activation based on time elapsed.
-    
-    Uses exponential decay: activation * exp(-decay_rate * time_elapsed)
-    
+
+    Uses exponential decay: activation * exp(-decay_rate * elapsed_days)
+
     Args:
         current_activation: Current activation value [0-1]
         last_touched: Unix timestamp when node was last touched
-        decay_rate: Decay rate constant (default 0.01 = ~1% per unit time)
-        now: Current timestamp (defaults to time.time())
-        
+        decay_rate: Per-day decay rate constant
+        now: Current Unix timestamp (defaults to time.time())
+        min_activation: Floor value (default 0.05)
+
     Returns:
-        Decayed activation value
+        Decayed activation value, clamped to [min_activation, 1.0]
     """
     if now is None:
         now = time()
-    
-    time_elapsed = now - last_touched
-    
-    # Exponential decay: activation decreases by factor of e^(-decay_rate * time)
-    # This gives smooth, continuous decay that never quite reaches zero
-    decayed = current_activation * (2.718281828 ** (-decay_rate * time_elapsed))
-    
-    return max(0.0, min(1.0, decayed))
+
+    elapsed_days = (now - last_touched) / _SECONDS_PER_DAY
+    decayed = current_activation * math.exp(-decay_rate * elapsed_days)
+    return max(min_activation, min(1.0, decayed))
 
 
 def apply_decay(
     states: List[FluidMemoryState],
     now: Optional[float] = None,
-    min_activation: float = 0.01,
+    min_activation: float = DEFAULT_MIN_ACTIVATION,
 ) -> List[FluidMemoryState]:
     """
-    Apply decay to all states in the list.
-    
+    Apply per-day decay to all states in the list.
+
+    Only activation is decayed. source_trust, confidence, and
+    legal_weight are left untouched — they reflect evidence quality,
+    not recency of attention.
+
     Args:
         states: List of fluid states to decay
         now: Current timestamp (defaults to time.time())
-        min_activation: Minimum activation floor (prevents true zero)
-        
+        min_activation: Floor to prevent nodes reaching zero
+
     Returns:
-        The same list with decayed activation values
+        The same list with updated activation values (mutated in-place)
     """
     if now is None:
         now = time()
-    
+
     for state in states:
-        decayed = compute_decayed_activation(
+        rate = _effective_decay_rate(state)
+        state.activation = compute_decayed_activation(
             current_activation=state.activation,
             last_touched=state.last_touched_at,
-            decay_rate=state.decay_rate,
+            decay_rate=rate,
             now=now,
+            min_activation=min_activation,
         )
-        # Apply floor to prevent true zero activation
-        state.activation = max(min_activation, decayed)
-    
+
     return states
 
 
 def compute_recency_score(
     last_touched: float,
     now: Optional[float] = None,
-    half_life: float = 86400.0,  # 24 hours in seconds
+    half_life_days: float = DEFAULT_RECENCY_HALF_LIFE_DAYS,
 ) -> float:
     """
     Compute a recency score based on time since last touch.
-    
-    Uses a half-life decay: score = 1.0 at touch time,
-    0.5 after half_life seconds, approaching 0 over time.
-    
+
+    Uses half-life decay: 1.0 immediately after touch,
+    0.5 after half_life_days, approaching 0 over time.
+
     Args:
         last_touched: Unix timestamp of last touch
         now: Current timestamp (defaults to time.time())
-        half_life: Time in seconds for score to decay to 0.5
-        
+        half_life_days: Days for score to reach 0.5 (default = 1 day)
+
     Returns:
         Recency score [0-1]
     """
     if now is None:
         now = time()
-    
-    time_elapsed = now - last_touched
-    
-    # Half-life decay: score = 0.5^(time_elapsed / half_life)
-    score = 0.5 ** (time_elapsed / half_life)
-    
+
+    elapsed_days = (now - last_touched) / _SECONDS_PER_DAY
+    score = 0.5 ** (elapsed_days / half_life_days)
     return max(0.0, min(1.0, score))
 
 
@@ -110,21 +144,21 @@ def update_recency_scores(
 ) -> List[FluidMemoryState]:
     """
     Update recency scores for all states.
-    
+
     Args:
         states: List of fluid states to update
         now: Current timestamp (defaults to time.time())
-        
+
     Returns:
-        The same list with updated recency scores
+        The same list with updated recency_score values
     """
     if now is None:
         now = time()
-    
+
     for state in states:
         state.recency_score = compute_recency_score(
             last_touched=state.last_touched_at,
             now=now,
         )
-    
+
     return states
