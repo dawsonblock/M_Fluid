@@ -227,6 +227,11 @@ async def get_neighbour_ids(
         edge_types = ["has_facet", "involves_entity", "has_point", "supported_by", "includes_chunk"]
 
         for edge_type in edge_types:
+            # Validate edge_type before interpolation
+            if not validate_graph_identifier(edge_type):
+                logger.warning("fluid.graph_access: unsafe edge_type rejected: %s", edge_type)
+                continue
+
             query = f"""
                 MATCH (n)-[:{edge_type}]-(m)
                 WHERE n.id = $node_id
@@ -306,6 +311,11 @@ async def get_connected_nodes(
         types_to_query = edge_types if edge_types else ["has_facet", "involves_entity", "has_point", "supported_by"]
 
         for edge_type in types_to_query:
+            # Validate edge_type before interpolation
+            if not validate_graph_identifier(edge_type):
+                logger.warning("fluid.graph_access: unsafe edge_type rejected: %s", edge_type)
+                continue
+
             query = f"""
                 MATCH (n)-[r:{edge_type}]-(m)
                 WHERE n.id = $node_id

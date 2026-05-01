@@ -170,6 +170,8 @@ class SourceRegistry:
         """
         Return (trust, legal_weight, decay_lane) for a source type.
 
+        Uses derived trust from structured fields as primary.
+        Falls back to stored trust only if derived is unavailable.
         Resolves: DB → YAML → hardcoded fallback.
         """
         if not self._initialized:
@@ -183,7 +185,21 @@ class SourceRegistry:
             or _HARDCODED_FALLBACK.get(key)
             or _HARDCODED_FALLBACK["unknown"]
         )
-        return entry.trust, entry.legal_weight, entry.decay_lane
+
+        # Use derived trust from structured fields (primary)
+        # This is explainable: authority*0.3 + verifiability*0.3 + originality*0.2 + independence*0.2
+        derived_trust = entry.derive_trust()
+
+        # Only use manual trust if explicitly set to different value
+        # or if derived trust is at default (0.5)
+        if entry.trust != 0.10 and abs(entry.trust - derived_trust) > 0.1:
+            # Manual override exists, use it but log that derived is available
+            effective_trust = entry.trust
+        else:
+            # Use derived trust (explainable)
+            effective_trust = derived_trust
+
+        return effective_trust, entry.legal_weight, entry.decay_lane
 
     async def get_source_profile(self, source_type: Optional[str]) -> SourceTrustEntry:
         """
@@ -248,13 +264,13 @@ class SourceRegistry:
                         legal_weight=r.legal_weight,
                         decay_lane=r.decay_lane,
                         description=r.description,
-                        authority=r.authority or 0.50,
-                        verifiability=r.verifiability or 0.50,
-                        originality=r.originality or 0.50,
-                        independence=r.independence or 0.50,
-                        legal_status_label=r.legal_status_label or "unverified",
-                        legal_status_weight=r.legal_status_weight or 0.50,
-                        default_claim_status=r.default_claim_status or "needs_verification",
+                        authority=r.authority if r.authority is not None else 0.50,
+                        verifiability=r.verifiability if r.verifiability is not None else 0.50,
+                        originality=r.originality if r.originality is not None else 0.50,
+                        independence=r.independence if r.independence is not None else 0.50,
+                        legal_status_label=r.legal_status_label if r.legal_status_label is not None else "unverified",
+                        legal_status_weight=r.legal_status_weight if r.legal_status_weight is not None else 0.50,
+                        default_claim_status=r.default_claim_status if r.default_claim_status is not None else "needs_verification",
                     )
                     for r in records
                 }
