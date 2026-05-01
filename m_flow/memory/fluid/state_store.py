@@ -477,3 +477,11 @@ class FluidStateStore:
                 )
             )
             await session.commit()
+
+    async def ensure_tables(self) -> None:
+        """Public method to ensure all tables exist."""
+        await self._ensure_tables()
+
+    def get_session(self):
+        """Get an async session context manager from the engine."""
+        return self._engine.sessionmaker()

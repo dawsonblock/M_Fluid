@@ -109,8 +109,8 @@ class TimelineCompressor:
             description: Human-readable event description
         """
         try:
-            await self._store._ensure_tables()
-            async with self._store._engine.sessionmaker() as session:
+            await self._store.ensure_tables()
+            async with self._store.get_session() as session:
                 await session.execute(
                     insert(TimelineEventORM).values(
                         node_id=node_id,
@@ -148,8 +148,8 @@ class TimelineCompressor:
             List of TimelineEvent ordered by event_date
         """
         try:
-            await self._store._ensure_tables()
-            async with self._store._engine.sessionmaker() as session:
+            await self._store.ensure_tables()
+            async with self._store.get_session() as session:
                 query = (
                     select(TimelineEventORM)
                     .where(TimelineEventORM.node_id == node_id)
