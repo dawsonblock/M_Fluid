@@ -59,13 +59,36 @@ class FluidMemoryConfig(MflowSettings):
     db_username: str = ""
     db_password: str = ""
 
-    # Decay lane rates (per-day)
-    short_term_decay: float = 0.25
-    normal_decay: float = 0.02
-    legal_decay: float = 0.002
+    # ---------------------------------------------------------------------------
+    # 5-Lane decay rates (per-day)
+    # activation/recency use attention_decay or interest_decay
+    # trust and legal_weight use trust_decay / legal_decay_rate (both 0.0 → immutable)
+    # contradiction_pressure eases via contradiction_decay
+    # ---------------------------------------------------------------------------
+    attention_decay: float = 0.20        # short-term visibility (breaking news)
+    interest_decay: float = 0.05         # user/session engagement
+    trust_decay: float = 0.000           # provenance trust — never decays
+    legal_decay_rate: float = 0.000      # court/gov evidence — immutable by policy
+    contradiction_decay: float = 0.01    # conflict pressure eases slowly
+
+    # Legacy aliases kept for backward compat (mapped to closest equivalent)
+    short_term_decay: float = 0.20       # alias → attention_decay
+    normal_decay: float = 0.05           # alias → interest_decay
+    legal_decay: float = 0.000           # alias → legal_decay_rate
+
     minimum_activation: float = 0.05
 
-    # Scoring bounds
+    # ---------------------------------------------------------------------------
+    # Effective score weights (must sum to 1.0)
+    # effective_score = semantic*w_semantic + graph*w_graph
+    #                  + activation*w_activation + trust*w_trust
+    # ---------------------------------------------------------------------------
+    w_semantic: float = 0.55
+    w_graph: float = 0.20
+    w_activation: float = 0.15
+    w_trust: float = 0.10
+
+    # Fluid boost bounds (legacy path)
     max_boost_impact: float = 0.15
     max_boost_fraction: float = 0.30
 
@@ -74,6 +97,13 @@ class FluidMemoryConfig(MflowSettings):
     propagation_max_depth: int = 2
     activation_increment: float = 0.25
     max_activation: float = 1.0
+
+    # JudgeTracker / legal features
+    enable_jurisdiction: bool = True
+    enable_citation_graph: bool = True
+    enable_timeline: bool = True
+    enable_media_amplification: bool = True
+    default_jurisdiction: str = "unknown"
 
 
 @lru_cache(maxsize=1)

@@ -49,6 +49,12 @@ class FluidProvenance(BaseModel):
 
     Attached to every audit log entry so that every score change
     can be traced back to its source, method, and timestamp.
+
+    JudgeTracker fields:
+        source_lineage_chain    ordered chain of source IDs at mutation time
+        jurisdiction            jurisdiction code at time of event
+        event_confidence        cross-confirmation confidence at time of event
+        amplification_factor    media amplification score at time of event
     """
     node_id: str
     event_type: str
@@ -58,6 +64,12 @@ class FluidProvenance(BaseModel):
     confidence_method: str = "unknown"  # e.g. "source_trust", "llm_conflict", "manual"
     old_values: Dict[str, Any] = {}
     new_values: Dict[str, Any] = {}
+
+    # JudgeTracker / legal provenance
+    source_lineage_chain: List[str] = []
+    jurisdiction: Optional[str] = None
+    event_confidence: float = 0.5
+    amplification_factor: float = 0.0
 
 
 class FluidAuditRecord(ModelBase):

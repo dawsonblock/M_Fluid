@@ -26,7 +26,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from m_flow.adapters.relational.ModelBase import Base as ModelBase
 from m_flow.adapters.relational.create_relational_engine import create_relational_engine
-from m_flow.memory.fluid.models import FluidMemoryState
+from m_flow.memory.fluid.models import (
+    FluidMemoryState,
+    SourceLineageRecord,
+    MediaAmplificationEvent,
+)
 
 
 class FluidStateRecord(ModelBase):
@@ -39,8 +43,8 @@ class FluidStateRecord(ModelBase):
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
     source_trust: Mapped[float] = mapped_column(Float, default=0.5)
     recency_score: Mapped[float] = mapped_column(Float, default=1.0)
-    decay_rate: Mapped[float] = mapped_column(Float, default=0.02)  # per-day
-    decay_lane: Mapped[str] = mapped_column(String(20), default="normal")
+    decay_rate: Mapped[float] = mapped_column(Float, default=0.05)  # per-day; INTEREST_DECAY
+    decay_lane: Mapped[str] = mapped_column(String(20), default="interest")
     reinforcement_count: Mapped[int] = mapped_column(Integer, default=0)
     contradiction_pressure: Mapped[float] = mapped_column(Float, default=0.0)
     salience: Mapped[float] = mapped_column(Float, default=0.5)
@@ -51,6 +55,21 @@ class FluidStateRecord(ModelBase):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+    # Provenance / lineage
+    source_lineage: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
+    media_amplification: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Legal / jurisdiction (JudgeTracker)
+    jurisdiction: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    judge_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    event_confidence: Mapped[float] = mapped_column(Float, default=0.5)
+
+    # Geographic
+    geographic_scope: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # Contradiction cluster
+    contradiction_cluster_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
 
 class ClaimConflictRecord(ModelBase):
@@ -65,6 +84,35 @@ class ClaimConflictRecord(ModelBase):
     source_id_b: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     conflict_reason: Mapped[str] = mapped_column(Text, default="")
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    detected_at: Mapped[float] = mapped_column(Float)
+    contradiction_cluster_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SourceLineageORM(ModelBase):
+    """SQLAlchemy model for source lineage / citation graph edges."""
+
+    __tablename__ = "fluid_source_lineage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    node_id: Mapped[str] = mapped_column(String(255), index=True)
+    parent_source_id: Mapped[str] = mapped_column(String(255))
+    child_source_id: Mapped[str] = mapped_column(String(255))
+    relationship: Mapped[str] = mapped_column(String(30), default="cites")
+    recorded_at: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class MediaAmplificationORM(ModelBase):
+    """SQLAlchemy model for media amplification / duplicate collapse events."""
+
+    __tablename__ = "fluid_media_amplification"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    node_id: Mapped[str] = mapped_column(String(255), index=True)
+    canonical_source_id: Mapped[str] = mapped_column(String(255))
+    duplicate_source_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
+    amplification_factor: Mapped[float] = mapped_column(Float, default=0.0)
     detected_at: Mapped[float] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -117,6 +165,13 @@ class FluidStateStore:
     
     def _record_to_state(self, record: FluidStateRecord) -> FluidMemoryState:
         """Convert DB record to FluidMemoryState model."""
+        import json
+        lineage: List[str] = []
+        if record.source_lineage:
+            try:
+                lineage = json.loads(record.source_lineage)
+            except Exception:
+                lineage = []
         return FluidMemoryState(
             node_id=record.node_id,
             activation=record.activation,
@@ -131,10 +186,18 @@ class FluidStateStore:
             user_relevance=record.user_relevance,
             legal_weight=record.legal_weight,
             last_touched_at=record.last_touched_at,
+            source_lineage=lineage,
+            media_amplification=record.media_amplification or 0.0,
+            jurisdiction=record.jurisdiction,
+            judge_id=record.judge_id,
+            event_confidence=record.event_confidence or 0.5,
+            geographic_scope=record.geographic_scope,
+            contradiction_cluster_id=record.contradiction_cluster_id,
         )
     
     def _state_to_record_dict(self, state: FluidMemoryState) -> dict:
         """Convert FluidMemoryState to dict for DB insertion."""
+        import json
         return {
             "node_id": state.node_id,
             "activation": state.activation,
@@ -149,6 +212,13 @@ class FluidStateStore:
             "user_relevance": state.user_relevance,
             "legal_weight": state.legal_weight,
             "last_touched_at": state.last_touched_at,
+            "source_lineage": json.dumps(state.source_lineage) if state.source_lineage else None,
+            "media_amplification": state.media_amplification,
+            "jurisdiction": state.jurisdiction,
+            "judge_id": state.judge_id,
+            "event_confidence": state.event_confidence,
+            "geographic_scope": state.geographic_scope,
+            "contradiction_cluster_id": state.contradiction_cluster_id,
         }
     
     async def get(self, node_id: str) -> Optional[FluidMemoryState]:
@@ -343,6 +413,67 @@ class FluidStateStore:
                     conflict_reason=conflict.conflict_reason,
                     confidence=conflict.confidence,
                     detected_at=conflict.detected_at,
+                    contradiction_cluster_id=getattr(conflict, "contradiction_cluster_id", None),
+                )
+            )
+            await session.commit()
+
+    async def save_lineage(self, record: SourceLineageRecord) -> None:
+        """
+        Persist a source lineage edge to the fluid_source_lineage table.
+
+        Args:
+            record: SourceLineageRecord model instance
+        """
+        await self._ensure_tables()
+        async with self._engine.sessionmaker() as session:
+            await session.execute(
+                insert(SourceLineageORM).values(
+                    node_id=record.node_id,
+                    parent_source_id=record.parent_source_id,
+                    child_source_id=record.child_source_id,
+                    relationship=record.relationship,
+                    recorded_at=record.recorded_at,
+                )
+            )
+            await session.commit()
+
+    async def get_lineage(self, node_id: str) -> List[SourceLineageRecord]:
+        """Get all lineage records for a node."""
+        await self._ensure_tables()
+        async with self._engine.sessionmaker() as session:
+            result = await session.execute(
+                select(SourceLineageORM).where(SourceLineageORM.node_id == node_id)
+            )
+            rows = result.scalars().all()
+            return [
+                SourceLineageRecord(
+                    node_id=r.node_id,
+                    parent_source_id=r.parent_source_id,
+                    child_source_id=r.child_source_id,
+                    relationship=r.relationship,
+                    recorded_at=r.recorded_at,
+                )
+                for r in rows
+            ]
+
+    async def save_media_amplification(self, event: MediaAmplificationEvent) -> None:
+        """
+        Persist a MediaAmplificationEvent to the fluid_media_amplification table.
+
+        Args:
+            event: MediaAmplificationEvent model instance
+        """
+        import json
+        await self._ensure_tables()
+        async with self._engine.sessionmaker() as session:
+            await session.execute(
+                insert(MediaAmplificationORM).values(
+                    node_id=event.node_id,
+                    canonical_source_id=event.canonical_source_id,
+                    duplicate_source_ids=json.dumps(event.duplicate_source_ids),
+                    amplification_factor=event.amplification_factor,
+                    detected_at=event.detected_at,
                 )
             )
             await session.commit()

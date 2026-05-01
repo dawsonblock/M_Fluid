@@ -1,0 +1,74 @@
+# Fluid Memory Jurisdiction Weighting
+#
+# Maps jurisdiction codes to trust multipliers applied during scoring.
+# A multiplier of 1.0 means full trust contribution from that jurisdiction.
+# A multiplier of 0.0 would remove all trust contribution.
+#
+# jurisdiction_code: ISO 3166-2 or custom internal code
+# trust_multiplier:  [0.0, 1.0] — scales source_trust for scoring
+# description:       human-readable label
+#
+# Tier 1 — Federal / Supreme (highest authority)
+federal:
+  trust_multiplier: 1.0
+  description: "Federal court / US federal government"
+
+supreme_court:
+  trust_multiplier: 1.0
+  description: "US Supreme Court"
+
+international:
+  trust_multiplier: 0.90
+  description: "International court or treaty body (ICC, ICJ, etc.)"
+
+# Tier 2 — State / Provincial
+state:
+  trust_multiplier: 0.80
+  description: "US state court or state government"
+
+US-TX:
+  trust_multiplier: 0.80
+  description: "Texas state court / government"
+
+US-CA:
+  trust_multiplier: 0.80
+  description: "California state court / government"
+
+US-NY:
+  trust_multiplier: 0.80
+  description: "New York state court / government"
+
+US-FL:
+  trust_multiplier: 0.80
+  description: "Florida state court / government"
+
+# Tier 3 — Local / Municipal
+local:
+  trust_multiplier: 0.60
+  description: "Local court, city, or county"
+
+municipal:
+  trust_multiplier: 0.60
+  description: "Municipal court"
+
+county:
+  trust_multiplier: 0.65
+  description: "County court or sheriff"
+
+# Tier 4 — Specialized
+military:
+  trust_multiplier: 0.85
+  description: "US military court (JAG / court-martial)"
+
+bankruptcy:
+  trust_multiplier: 0.75
+  description: "US Bankruptcy Court"
+
+immigration:
+  trust_multiplier: 0.75
+  description: "US Immigration Court"
+
+# Default fallback
+unknown:
+  trust_multiplier: 0.50
+  description: "Unknown or unrecognised jurisdiction"

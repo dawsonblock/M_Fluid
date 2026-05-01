@@ -10,12 +10,24 @@ from m_flow.memory.fluid.models import (
     FluidMemoryState,
     FluidUpdateEvent,
     ClaimConflict,
+    SourceLineageRecord,
+    MediaAmplificationEvent,
     get_source_weights,
 )
 from m_flow.memory.fluid.decay import (
     compute_decayed_activation,
+    compute_decayed_contradiction_pressure,
     apply_decay,
     compute_recency_score,
+    ATTENTION_DECAY,
+    INTEREST_DECAY,
+    TRUST_DECAY,
+    LEGAL_DECAY,
+    CONTRADICTION_DECAY,
+    SHORT_TERM_DECAY,
+    NORMAL_DECAY,
+    DEFAULT_MIN_ACTIVATION,
+    _LANE_RATES,
 )
 from m_flow.memory.fluid.contradiction import (
     compute_contradiction_pressure,
@@ -24,15 +36,10 @@ from m_flow.memory.fluid.contradiction import (
 from m_flow.memory.fluid.scoring import (
     fluid_score,
     compute_fluid_boost,
+    compute_effective_score,
+    explain_effective_score,
     explain_fluid_score,
     should_boost_retrieval,
-)
-from m_flow.memory.fluid.decay import (
-    SHORT_TERM_DECAY,
-    NORMAL_DECAY,
-    LEGAL_DECAY,
-    DEFAULT_MIN_ACTIVATION,
-    _LANE_RATES,
 )
 
 
@@ -45,10 +52,18 @@ class TestFluidMemoryState:
         assert state.activation == 0.0
         assert state.confidence == 0.5
         assert state.source_trust == 0.5
-        assert state.decay_rate == NORMAL_DECAY          # 0.02/day, not 0.01/sec
-        assert state.decay_lane == "normal"
+        assert state.decay_rate == INTEREST_DECAY        # 0.05/day
+        assert state.decay_lane == "interest"            # v2 default lane
         assert state.reinforcement_count == 0
         assert state.contradiction_pressure == 0.0
+        # JudgeTracker fields default
+        assert state.source_lineage == []
+        assert state.jurisdiction is None
+        assert state.judge_id is None
+        assert state.event_confidence == 0.5
+        assert state.geographic_scope is None
+        assert state.contradiction_cluster_id is None
+        assert state.media_amplification == 0.0
     
     def test_custom_values(self):
         state = FluidMemoryState(
@@ -77,6 +92,7 @@ class TestFluidUpdateEvent:
         assert len(event.touched_node_ids) == 3
         assert event.source_trust == 0.60
         assert event.salience == 0.7
+        assert event.decay_lane == "interest"  # v2 default
     
     def test_contradiction_lists(self):
         event = FluidUpdateEvent(
@@ -87,6 +103,22 @@ class TestFluidUpdateEvent:
         )
         assert event.supports == ["b", "c"]
         assert event.contradicts == ["d"]
+
+    def test_judgetracker_enrichment_fields(self):
+        event = FluidUpdateEvent(
+            touched_node_ids=["a"],
+            source_id="court-doc-001",
+            jurisdiction="US-TX",
+            judge_id="judge:42",
+            geographic_scope="state",
+            event_confidence=0.90,
+            parent_source_ids=["src:original", "src:confirm"],
+        )
+        assert event.jurisdiction == "US-TX"
+        assert event.judge_id == "judge:42"
+        assert event.geographic_scope == "state"
+        assert event.event_confidence == 0.90
+        assert "src:original" in event.parent_source_ids
 
 
 class TestClaimConflict:
@@ -147,7 +179,7 @@ class TestSourceWeights:
 
 
 class TestDecay:
-    """Test decay functions."""
+    """Test 5-lane decay model."""
 
     _SECONDS_PER_DAY = 86400.0
 
@@ -156,75 +188,153 @@ class TestDecay:
         decayed = compute_decayed_activation(
             current_activation=0.5,
             last_touched=now,
-            decay_rate=NORMAL_DECAY,
+            decay_rate=INTEREST_DECAY,
             now=now,
         )
         assert decayed == 0.5
 
-    def test_decay_per_day_normal_lane(self):
-        """After 1 day with NORMAL_DECAY=0.02, activation should decrease by ~2%."""
+    def test_attention_decay_rate(self):
+        """ATTENTION_DECAY=0.20: after 1 day, activation < 82% of original."""
         now = time()
         one_day_ago = now - self._SECONDS_PER_DAY
-        activation = 0.8
-        decayed = compute_decayed_activation(
-            current_activation=activation,
-            last_touched=one_day_ago,
-            decay_rate=NORMAL_DECAY,
-            now=now,
-        )
         import math
-        expected = activation * math.exp(-NORMAL_DECAY * 1.0)  # 1 day
+        expected = 0.8 * math.exp(-ATTENTION_DECAY * 1.0)
+        decayed = compute_decayed_activation(0.8, one_day_ago, ATTENTION_DECAY, now=now)
         assert abs(decayed - expected) < 0.001
-        # Should retain most activation after 1 day
-        assert decayed > 0.7
+        assert decayed < 0.8 * 0.82  # at least 18% lost per day
 
-    def test_decay_per_day_legal_lane(self):
-        """Legal lane decays 10x slower than normal."""
+    def test_interest_decay_rate(self):
+        """INTEREST_DECAY=0.05: after 1 day, activation should retain ~95%."""
+        now = time()
+        one_day_ago = now - self._SECONDS_PER_DAY
+        import math
+        expected = 0.8 * math.exp(-INTEREST_DECAY * 1.0)
+        decayed = compute_decayed_activation(0.8, one_day_ago, INTEREST_DECAY, now=now)
+        assert abs(decayed - expected) < 0.001
+        assert decayed > 0.7  # retains most after 1 day
+
+    def test_trust_decay_is_zero(self):
+        """TRUST_DECAY=0.0: trust is immutable — activation never decreases."""
+        assert TRUST_DECAY == 0.0
+        now = time()
+        one_year_ago = now - 365 * self._SECONDS_PER_DAY
+        decayed = compute_decayed_activation(0.9, one_year_ago, TRUST_DECAY, now=now)
+        # decay_rate=0.0 → no decay, returns clamped original
+        assert abs(decayed - 0.9) < 1e-9
+
+    def test_legal_decay_is_zero(self):
+        """LEGAL_DECAY=0.0: legal evidence is immutable by policy."""
+        assert LEGAL_DECAY == 0.0
+
+    def test_contradiction_decay_eases_pressure(self):
+        """CONTRADICTION_DECAY=0.01: pressure decreases slowly over 7 days."""
         now = time()
         one_week_ago = now - 7 * self._SECONDS_PER_DAY
-        decayed_legal = compute_decayed_activation(
-            current_activation=1.0,
+        import math
+        eased = compute_decayed_contradiction_pressure(
+            current_pressure=0.8,
             last_touched=one_week_ago,
-            decay_rate=LEGAL_DECAY,
             now=now,
         )
-        decayed_normal = compute_decayed_activation(
-            current_activation=1.0,
-            last_touched=one_week_ago,
-            decay_rate=NORMAL_DECAY,
-            now=now,
-        )
-        assert decayed_legal > decayed_normal
+        expected = 0.8 * math.exp(-CONTRADICTION_DECAY * 7)
+        assert abs(eased - expected) < 0.001
+        assert eased < 0.8  # pressure has eased
+        assert eased > 0.0  # not fully resolved
 
-    def test_decay_per_day_short_term_lane(self):
-        """Short-term lane decays much faster than normal."""
+    def test_trust_lane_node_never_decays(self):
+        """A node in the 'trust' lane keeps its activation unchanged."""
+        now = time()
+        one_year_ago = now - 365 * self._SECONDS_PER_DAY
+        state = FluidMemoryState(
+            node_id="court-order",
+            activation=0.9,
+            last_touched_at=one_year_ago,
+            decay_lane="trust",
+            decay_rate=TRUST_DECAY,
+        )
+        decayed = apply_decay([state], now=now)
+        assert abs(decayed[0].activation - 0.9) < 1e-9
+
+    def test_legal_lane_node_never_decays(self):
+        """A node in the 'legal' lane keeps its activation unchanged."""
+        now = time()
+        one_year_ago = now - 365 * self._SECONDS_PER_DAY
+        state = FluidMemoryState(
+            node_id="evidence:123",
+            activation=0.95,
+            last_touched_at=one_year_ago,
+            decay_lane="legal",
+            decay_rate=LEGAL_DECAY,
+        )
+        decayed = apply_decay([state], now=now)
+        assert abs(decayed[0].activation - 0.95) < 1e-9
+
+    def test_attention_lane_decays_fast(self):
+        """Attention lane is fastest: retains < 82% after 1 day."""
         now = time()
         one_day_ago = now - self._SECONDS_PER_DAY
-        decayed = compute_decayed_activation(
-            current_activation=1.0,
-            last_touched=one_day_ago,
-            decay_rate=SHORT_TERM_DECAY,
-            now=now,
+        state = FluidMemoryState(
+            node_id="news:breaking",
+            activation=1.0,
+            last_touched_at=one_day_ago,
+            decay_lane="attention",
         )
-        # 0.25/day: after 1 day should retain < 80% of activation
-        assert decayed < 0.8
+        decayed = apply_decay([state], now=now)
+        assert decayed[0].activation < 0.82
+
+    def test_apply_decay_also_eases_contradiction_pressure(self):
+        """apply_decay() now also eases contradiction_pressure."""
+        now = time()
+        one_week_ago = now - 7 * self._SECONDS_PER_DAY
+        state = FluidMemoryState(
+            node_id="test",
+            activation=0.5,
+            contradiction_pressure=0.8,
+            last_touched_at=one_week_ago,
+            decay_lane="interest",
+        )
+        decayed = apply_decay([state], now=now)
+        assert decayed[0].contradiction_pressure < 0.8
+
+    def test_apply_decay_does_not_touch_source_trust(self):
+        """apply_decay() must not modify source_trust or legal_weight."""
+        now = time()
+        one_year_ago = now - 365 * self._SECONDS_PER_DAY
+        state = FluidMemoryState(
+            node_id="test",
+            activation=0.5,
+            source_trust=0.95,
+            legal_weight=1.0,
+            last_touched_at=one_year_ago,
+            decay_lane="interest",
+        )
+        decayed = apply_decay([state], now=now)
+        assert decayed[0].source_trust == 0.95, "Trust must never decay"
+        assert decayed[0].legal_weight == 1.0, "Legal weight must never decay"
 
     def test_activation_floor_applied(self):
         """Activation should never drop below DEFAULT_MIN_ACTIVATION."""
         now = time()
-        very_old = now - 365 * self._SECONDS_PER_DAY  # 1 year ago
+        very_old = now - 365 * self._SECONDS_PER_DAY
         decayed = compute_decayed_activation(
             current_activation=1.0,
             last_touched=very_old,
-            decay_rate=SHORT_TERM_DECAY,
+            decay_rate=ATTENTION_DECAY,
             now=now,
             min_activation=DEFAULT_MIN_ACTIVATION,
         )
         assert decayed >= DEFAULT_MIN_ACTIVATION
 
     def test_lane_rates_are_ordered(self):
-        """Verify: legal < normal < short_term decay rate."""
-        assert LEGAL_DECAY < NORMAL_DECAY < SHORT_TERM_DECAY
+        """Verify 5-lane rate ordering: legal=trust=0 < contradiction < interest < attention."""
+        assert LEGAL_DECAY == 0.0
+        assert TRUST_DECAY == 0.0
+        assert TRUST_DECAY < CONTRADICTION_DECAY < INTEREST_DECAY < ATTENTION_DECAY
+
+    def test_backward_compat_aliases(self):
+        """Legacy SHORT_TERM_DECAY and NORMAL_DECAY aliases still exist."""
+        assert SHORT_TERM_DECAY == ATTENTION_DECAY
+        assert NORMAL_DECAY == INTEREST_DECAY
 
     def test_apply_decay_to_states(self):
         now = time()
@@ -234,19 +344,18 @@ class TestDecay:
                 node_id="a",
                 activation=0.8,
                 last_touched_at=one_day_ago,
-                decay_rate=NORMAL_DECAY,
-                decay_lane="normal",
+                decay_rate=INTEREST_DECAY,
+                decay_lane="interest",
             ),
             FluidMemoryState(
                 node_id="b",
                 activation=0.4,
                 last_touched_at=now - 3 * self._SECONDS_PER_DAY,
-                decay_rate=NORMAL_DECAY,
-                decay_lane="normal",
+                decay_rate=INTEREST_DECAY,
+                decay_lane="interest",
             ),
         ]
         decayed_states = apply_decay(states, now=now)
-        # Activation should decrease but stay above floor
         assert decayed_states[0].activation < 0.8
         assert decayed_states[0].activation >= DEFAULT_MIN_ACTIVATION
         assert decayed_states[1].activation < 0.4
@@ -261,7 +370,7 @@ class TestDecay:
         now = time()
         three_days_ago = now - 3 * self._SECONDS_PER_DAY
         score = compute_recency_score(three_days_ago, now=now)
-        assert score < 0.5  # 3 half-lives (1-day each) → score ~ 0.125
+        assert score < 0.5
 
 
 class TestContradiction:
@@ -451,6 +560,329 @@ class TestScoring:
             node_id="test", activation=0.8, confidence=0.8, contradiction_pressure=0.8
         )
         assert should_boost_retrieval(state_contradicted) is False
+
+
+class TestEffectiveScore:
+    """Test compute_effective_score (v2 primary scoring path)."""
+
+    def _state(self, **kwargs) -> FluidMemoryState:
+        defaults = dict(
+            node_id="test",
+            activation=0.5,
+            recency_score=0.8,
+            source_trust=0.7,
+            legal_weight=0.0,
+            contradiction_pressure=0.0,
+        )
+        defaults.update(kwargs)
+        return FluidMemoryState(**defaults)
+
+    def test_basic_formula(self):
+        """Verify the 4-component weighted formula."""
+        state = self._state(activation=0.5, recency_score=0.5, source_trust=0.5, legal_weight=0.0)
+        score = compute_effective_score(semantic_score=0.8, state=state, graph_score=0.6)
+        # activation_score = 0.5*0.6 + 0.5*0.4 = 0.50
+        # trust_score      = 0.5*0.7 + 0.0*0.3 = 0.35
+        # raw = 0.8*0.55 + 0.6*0.20 + 0.50*0.15 + 0.35*0.10
+        #     = 0.44 + 0.12 + 0.075 + 0.035 = 0.67
+        assert 0.60 < score < 0.80
+
+    def test_output_is_bounded_0_1(self):
+        """Output must always be in [0, 1]."""
+        state = self._state(activation=1.0, recency_score=1.0, source_trust=1.0, legal_weight=1.0)
+        score = compute_effective_score(semantic_score=1.0, state=state, graph_score=1.0)
+        assert 0.0 <= score <= 1.0
+
+        state_min = self._state(activation=0.0, recency_score=0.0, source_trust=0.0)
+        score_min = compute_effective_score(semantic_score=0.0, state=state_min, graph_score=0.0)
+        assert 0.0 <= score_min <= 1.0
+
+    def test_contradiction_penalty_is_multiplicative(self):
+        """Contradiction reduces effective score multiplicatively, not additively."""
+        state_clean = self._state(contradiction_pressure=0.0)
+        state_conflicted = self._state(contradiction_pressure=1.0)
+        semantic = 0.8
+        score_clean = compute_effective_score(semantic, state_clean)
+        score_conflicted = compute_effective_score(semantic, state_conflicted)
+        assert score_conflicted < score_clean
+        # At max contradiction, penalty capped at 30%
+        assert score_conflicted >= score_clean * 0.70 - 1e-9
+
+    def test_contradiction_penalty_capped_at_30_pct(self):
+        """Even with contradiction_pressure=1.0, score reduced by at most 30%."""
+        state = self._state(contradiction_pressure=1.0)
+        s_clean = self._state(contradiction_pressure=0.0)
+        base = compute_effective_score(0.8, s_clean)
+        penalised = compute_effective_score(0.8, state)
+        assert penalised >= base * 0.70 - 1e-9
+
+    def test_semantic_is_dominant_at_55_pct(self):
+        """With graph=0, activation=0, trust=0, score should be ~55% of semantic."""
+        state = self._state(activation=0.0, recency_score=0.0, source_trust=0.0, legal_weight=0.0)
+        score = compute_effective_score(semantic_score=1.0, state=state, graph_score=0.0)
+        assert abs(score - 0.55) < 0.02
+
+    def test_no_graph_fallback(self):
+        """graph_score defaults to 0.0, formula still works."""
+        state = self._state()
+        score = compute_effective_score(semantic_score=0.7, state=state)
+        assert 0.0 <= score <= 1.0
+
+    def test_explain_effective_score_keys(self):
+        state = self._state()
+        result = explain_effective_score(0.8, state, graph_score=0.5)
+        for key in ("semantic_score", "graph_score", "activation_score", "trust_score",
+                     "raw_score", "contradiction_pressure", "contradiction_penalty_fraction",
+                     "final_score", "components", "weights"):
+            assert key in result, f"Missing key: {key}"
+
+    def test_explain_components_match_formula(self):
+        """Sum of components + penalty should equal final_score."""
+        state = self._state(activation=0.6, recency_score=0.9, source_trust=0.8, legal_weight=0.3)
+        result = explain_effective_score(0.75, state, graph_score=0.4)
+        comp_sum = sum(result["components"].values())
+        assert abs(comp_sum - result["raw_score"]) < 1e-9
+        # final = raw_score * (1 - penalty_fraction), clamped to [0,1]
+        expected_final = min(1.0, max(0.0, result["raw_score"])) * (1.0 - result["contradiction_penalty_fraction"])
+        assert abs(result["final_score"] - expected_final) < 1e-9
+
+
+class TestJudgeTrackerModels:
+    """Test JudgeTracker-specific model fields."""
+
+    def test_source_lineage_record(self):
+        rec = SourceLineageRecord(
+            node_id="ep:001",
+            parent_source_id="src:abc",
+            child_source_id="src:xyz",
+            relationship="confirms",
+        )
+        assert rec.node_id == "ep:001"
+        assert rec.relationship == "confirms"
+        assert rec.recorded_at > 0
+
+    def test_media_amplification_event(self):
+        evt = MediaAmplificationEvent(
+            node_id="ep:002",
+            canonical_source_id="src:original",
+            duplicate_source_ids=["src:copy1", "src:copy2"],
+            amplification_factor=0.4,
+        )
+        assert evt.amplification_factor == 0.4
+        assert len(evt.duplicate_source_ids) == 2
+
+    def test_claim_conflict_has_cluster_id(self):
+        conflict = ClaimConflict(
+            node_id_a="ep:1",
+            node_id_b="ep:2",
+            contradiction_cluster_id="cluster-uuid-123",
+            confidence=0.9,
+        )
+        assert conflict.contradiction_cluster_id == "cluster-uuid-123"
+
+    def test_state_judgetracker_fields(self):
+        state = FluidMemoryState(
+            node_id="judge:99",
+            jurisdiction="US-TX",
+            judge_id="judge:42",
+            geographic_scope="state",
+            event_confidence=0.85,
+            source_lineage=["src:a", "src:b"],
+            media_amplification=0.3,
+            contradiction_cluster_id="cluster-abc",
+        )
+        assert state.jurisdiction == "US-TX"
+        assert state.judge_id == "judge:42"
+        assert state.geographic_scope == "state"
+        assert state.event_confidence == 0.85
+        assert state.source_lineage == ["src:a", "src:b"]
+        assert state.media_amplification == 0.3
+        assert state.contradiction_cluster_id == "cluster-abc"
+
+
+class TestJurisdictionWeighter:
+    """Test JurisdictionWeighter."""
+
+    def setup_method(self):
+        from m_flow.memory.fluid.jurisdiction import JurisdictionWeighter
+        self.weighter = JurisdictionWeighter()
+
+    def test_federal_is_authoritative(self):
+        assert self.weighter.is_authoritative("federal") is True
+
+    def test_local_not_authoritative(self):
+        assert self.weighter.is_authoritative("local") is False
+
+    def test_unknown_returns_low_multiplier(self):
+        mult = self.weighter.weight("completely_unknown_jurisdiction")
+        assert mult == 0.50
+
+    def test_court_record_bypasses_jurisdiction(self):
+        """court_record source type always returns 1.0 regardless of jurisdiction."""
+        mult = self.weighter.weight("local", source_type="court_record")
+        assert mult == 1.0
+
+    def test_apply_scales_trust(self):
+        weighted = self.weighter.apply(0.80, "state", "government_data")
+        assert weighted == 0.80  # government_data bypasses (1.0 * 0.80 = 0.80)
+
+    def test_apply_with_local_scales_down(self):
+        weighted = self.weighter.apply(0.80, "local", "blog_social")
+        assert weighted < 0.80  # local multiplier = 0.60
+        assert abs(weighted - 0.80 * 0.60) < 1e-9
+
+    def test_none_jurisdiction_returns_unknown(self):
+        mult = self.weighter.weight(None)
+        assert mult == self.weighter.weight("unknown")
+
+    def test_custom_overrides(self):
+        from m_flow.memory.fluid.jurisdiction import JurisdictionWeighter
+        custom_w = JurisdictionWeighter(custom_multipliers={"mytown": 0.999})
+        assert custom_w.weight("mytown") == 0.999
+
+    def test_list_jurisdictions_returns_dict(self):
+        all_j = self.weighter.list_jurisdictions()
+        assert isinstance(all_j, dict)
+        assert "federal" in all_j
+        assert "local" in all_j
+
+
+@pytest.mark.asyncio
+class TestCitationGraph:
+    """Test CitationGraph with an in-memory SQLite store."""
+
+    async def _make_store(self, tmp_path):
+        from m_flow.memory.fluid.state_store import FluidStateStore
+        return FluidStateStore(
+            db_provider="sqlite",
+            db_path=str(tmp_path),
+            db_name="test_citation",
+        )
+
+    async def test_add_and_get_citations(self, tmp_path):
+        from m_flow.memory.fluid.citation_graph import CitationGraph
+        store = await self._make_store(tmp_path)
+        cg = CitationGraph(store)
+
+        await cg.add_link("ep:1", "src:a", "src:b", "confirms")
+        await cg.add_link("ep:1", "src:c", "src:d", "cites")
+
+        records = await cg.get_citations("ep:1")
+        assert len(records) == 2
+
+    async def test_cross_confirmation_score_empty(self, tmp_path):
+        from m_flow.memory.fluid.citation_graph import CitationGraph
+        store = await self._make_store(tmp_path)
+        cg = CitationGraph(store)
+        score = await cg.compute_cross_confirmation_score("ep:no-citations")
+        assert score == 0.0
+
+    async def test_cross_confirmation_score_grows_with_sources(self, tmp_path):
+        from m_flow.memory.fluid.citation_graph import CitationGraph
+        store = await self._make_store(tmp_path)
+        cg = CitationGraph(store)
+
+        for i in range(5):
+            await cg.add_link("ep:1", f"src:parent_{i}", f"src:confirmer_{i}", "confirms")
+
+        score = await cg.compute_cross_confirmation_score("ep:1")
+        assert score == 1.0  # 5 independent confirming sources → score = 1.0
+
+    async def test_amplification_does_not_count_as_confirmation(self, tmp_path):
+        from m_flow.memory.fluid.citation_graph import CitationGraph
+        store = await self._make_store(tmp_path)
+        cg = CitationGraph(store)
+
+        # 10 amplification links
+        for i in range(10):
+            await cg.add_link("ep:1", "src:orig", f"src:dup_{i}", "amplifies")
+
+        # Cross-confirmation score should be 0 (no independent confirms)
+        score = await cg.compute_cross_confirmation_score("ep:1")
+        assert score == 0.0
+
+        # But amplification factor should be 1.0
+        amp = await cg.compute_amplification_factor("ep:1")
+        assert amp == 1.0
+
+    async def test_citation_depth(self, tmp_path):
+        from m_flow.memory.fluid.citation_graph import CitationGraph
+        store = await self._make_store(tmp_path)
+        cg = CitationGraph(store)
+
+        await cg.add_link("ep:1", "src:x", "src:y", "cites")
+        await cg.add_link("ep:1", "src:x", "src:z", "confirms")
+
+        depth = await cg.get_citation_depth("ep:1")
+        assert depth == 2  # two distinct confirming sources
+
+
+@pytest.mark.asyncio
+class TestTimelineCompressor:
+    """Test TimelineCompressor with in-memory SQLite."""
+
+    async def _make_store(self, tmp_path):
+        from m_flow.memory.fluid.state_store import FluidStateStore
+        return FluidStateStore(
+            db_provider="sqlite",
+            db_path=str(tmp_path),
+            db_name="test_timeline",
+        )
+
+    async def test_add_and_get_events(self, tmp_path):
+        from m_flow.memory.fluid.timeline import TimelineCompressor
+        store = await self._make_store(tmp_path)
+        tl = TimelineCompressor(store)
+        base = time()
+
+        await tl.add_event("judge:1", base, "court_hearing", confidence=0.9)
+        await tl.add_event("judge:1", base + 3600, "court_hearing", confidence=0.85)
+
+        events = await tl.get_timeline("judge:1")
+        assert len(events) == 2
+
+    async def test_compress_merges_same_type_within_window(self, tmp_path):
+        from m_flow.memory.fluid.timeline import TimelineCompressor
+        store = await self._make_store(tmp_path)
+        tl = TimelineCompressor(store)
+        base = time()
+
+        # 3 court hearings within 1 hour — should compress to 1
+        for i in range(3):
+            await tl.add_event("judge:1", base + i * 3600, "court_hearing", confidence=0.9)
+
+        compressed = await tl.compress("judge:1", merge_window_days=1.0)
+        assert len(compressed) == 1
+        assert compressed[0].compressed is True
+        assert compressed[0].compressed_count == 3
+
+    async def test_compress_keeps_different_event_types_separate(self, tmp_path):
+        from m_flow.memory.fluid.timeline import TimelineCompressor
+        store = await self._make_store(tmp_path)
+        tl = TimelineCompressor(store)
+        base = time()
+
+        await tl.add_event("judge:1", base, "court_hearing", confidence=0.9)
+        await tl.add_event("judge:1", base + 3600, "arrest", confidence=0.8)
+        await tl.add_event("judge:1", base + 7200, "court_hearing", confidence=0.7)
+
+        # court_hearing at base, arrest, court_hearing again — 3 distinct groups
+        compressed = await tl.compress("judge:1", merge_window_days=1.0)
+        # court_hearing(base), arrest, court_hearing(base+7200) — 3 separate events
+        assert len(compressed) == 3
+
+    async def test_compress_averages_confidence(self, tmp_path):
+        from m_flow.memory.fluid.timeline import TimelineCompressor
+        store = await self._make_store(tmp_path)
+        tl = TimelineCompressor(store)
+        base = time()
+
+        await tl.add_event("judge:1", base, "court_hearing", confidence=0.8)
+        await tl.add_event("judge:1", base + 3600, "court_hearing", confidence=0.6)
+
+        compressed = await tl.compress("judge:1", merge_window_days=1.0)
+        assert len(compressed) == 1
+        assert abs(compressed[0].confidence - 0.7) < 1e-4  # avg(0.8, 0.6)
 
 
 @pytest.mark.asyncio

@@ -100,12 +100,17 @@ class LocalFluidMemoryService:
         """
         Adjust retrieval bundle scores using fluid state.
 
-        Reads states for all bundle episode IDs from the store and
-        applies bounded fluid_score() to each bundle with a state.
-        Silently skips bundles with no fluid state.
+        Primary path (v2): uses compute_effective_score() when the bundle
+        exposes a similarity_score attribute (higher = better).
+
+        Fallback path (legacy): uses fluid_score() (distance-based,
+        lower = better) for bundles that only expose bundle.score.
+
+        Skips bundles with no active fluid state (activation == 0.0).
+        Failures are logged and original bundles returned intact.
         """
         from m_flow.shared.logging_utils import get_logger
-        from m_flow.memory.fluid.scoring import fluid_score
+        from m_flow.memory.fluid.scoring import compute_effective_score, fluid_score
 
         logger = get_logger("fluid.service")
 
@@ -116,7 +121,19 @@ class LocalFluidMemoryService:
 
             for bundle in bundles:
                 state = state_map.get(bundle.episode_id)
-                if state:
+                if not state:
+                    continue
+
+                # v2 path: bundle exposes similarity_score (higher = better)
+                if hasattr(bundle, "similarity_score") and bundle.similarity_score is not None:
+                    graph_score = getattr(bundle, "graph_score", 0.0) or 0.0
+                    bundle.similarity_score = compute_effective_score(
+                        semantic_score=float(bundle.similarity_score),
+                        state=state,
+                        graph_score=float(graph_score),
+                    )
+                else:
+                    # Legacy fallback: distance-based score (lower = better)
                     bundle.score = fluid_score(bundle.score, state)
 
         except Exception as exc:

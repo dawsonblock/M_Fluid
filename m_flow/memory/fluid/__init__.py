@@ -40,15 +40,22 @@ from m_flow.memory.fluid.models import (
     FluidMemoryState,
     FluidUpdateEvent,
     ClaimConflict,
+    SourceLineageRecord,
+    MediaAmplificationEvent,
     get_source_weights,
 )
 from m_flow.memory.fluid.scoring import (
+    compute_effective_score,
+    explain_effective_score,
     fluid_score,
     fluid_score_similarity,
     compute_fluid_boost,
     explain_fluid_score,
     should_boost_retrieval,
 )
+from m_flow.memory.fluid.citation_graph import CitationGraph
+from m_flow.memory.fluid.timeline import TimelineCompressor, TimelineEvent
+from m_flow.memory.fluid.jurisdiction import JurisdictionWeighter, get_jurisdiction_weighter
 from m_flow.memory.fluid.state_store import (
     FluidStateStore,
     ActivationMergeUpdate,

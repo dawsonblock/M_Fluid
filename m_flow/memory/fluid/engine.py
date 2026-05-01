@@ -12,11 +12,16 @@ from time import time
 from typing import TYPE_CHECKING, Optional, List
 
 from m_flow.shared.logging_utils import get_logger
-from m_flow.memory.fluid.models import FluidUpdateEvent, FluidMemoryState
+from m_flow.memory.fluid.models import FluidUpdateEvent, FluidMemoryState, SourceLineageRecord
 from m_flow.memory.fluid.config import get_fluid_config
 from m_flow.memory.fluid.state_store import FluidStateStore
 from m_flow.memory.fluid.propagation import propagate_activation_episodic
-from m_flow.memory.fluid.decay import apply_decay, update_recency_scores, _LANE_RATES, NORMAL_DECAY
+from m_flow.memory.fluid.decay import (
+    apply_decay,
+    update_recency_scores,
+    _LANE_RATES,
+    INTEREST_DECAY,
+)
 from m_flow.memory.fluid.contradiction import apply_contradictions
 from m_flow.memory.fluid.audit import FluidAuditLogger, AuditEventType, FluidProvenance
 
@@ -69,6 +74,9 @@ class FluidMemoryEngine:
         self._propagation_depth = cfg.propagation_max_depth
         self._min_activation = cfg.minimum_activation
         self._enable_contradiction = cfg.enable_contradiction
+        self._enable_citation = cfg.enable_citation_graph
+        self._enable_timeline = cfg.enable_timeline
+        self._enable_amplification = cfg.enable_media_amplification
 
     async def touch(self, event: FluidUpdateEvent) -> None:
         """
@@ -97,8 +105,8 @@ class FluidMemoryEngine:
         old_activations = {s.node_id: s.activation for s in states}
 
         # Step 2: Boost and update metadata
-        decay_lane = event.decay_lane or "normal"
-        decay_rate = _LANE_RATES.get(decay_lane, NORMAL_DECAY)
+        decay_lane = event.decay_lane or "interest"
+        decay_rate = _LANE_RATES.get(decay_lane, INTEREST_DECAY)
 
         for state in states:
             state.activation = min(
@@ -114,6 +122,20 @@ class FluidMemoryEngine:
             state.decay_lane = decay_lane
             state.decay_rate = decay_rate
 
+            # JudgeTracker enrichment — only overwrite if event provides values
+            if event.jurisdiction is not None:
+                state.jurisdiction = event.jurisdiction
+            if event.judge_id is not None:
+                state.judge_id = event.judge_id
+            if event.geographic_scope is not None:
+                state.geographic_scope = event.geographic_scope
+            # Update cross-confirmation confidence (take max)
+            state.event_confidence = max(state.event_confidence, event.event_confidence)
+
+            # Append to source lineage chain (deduplicated)
+            if event.source_id and event.source_id not in state.source_lineage:
+                state.source_lineage = state.source_lineage + [event.source_id]
+
         # Step 3: Apply per-day decay
         states = apply_decay(states, now, min_activation=self._min_activation)
 
@@ -123,6 +145,20 @@ class FluidMemoryEngine:
         # Step 5: LLM-assisted contradiction detection
         if self._enable_contradiction and cfg.enable_contradiction:
             await self._run_contradiction_detection(event, states, now)
+
+        # Step 5b: Record source lineage edges (citation graph)
+        if self._enable_citation and event.source_id and event.parent_source_ids:
+            for parent_id in event.parent_source_ids:
+                for state in states:
+                    try:
+                        await self.store.save_lineage(SourceLineageRecord(
+                            node_id=state.node_id,
+                            parent_source_id=parent_id,
+                            child_source_id=event.source_id,
+                            relationship="cites",
+                        ))
+                    except Exception as exc:
+                        logger.warning("fluid.engine: lineage save failed: %s", exc)
 
         # Step 6: Persist updated states
         await self.store.upsert_many(states)
@@ -140,6 +176,10 @@ class FluidMemoryEngine:
                     confidence_method="source_trust",
                     old_values={"activation": old_act} if old_act is not None else {},
                     new_values={"activation": state.activation},
+                    source_lineage_chain=list(state.source_lineage),
+                    jurisdiction=state.jurisdiction,
+                    event_confidence=state.event_confidence,
+                    amplification_factor=state.media_amplification,
                 )
                 await self.audit.log_touch(
                     node_id=state.node_id,
@@ -215,6 +255,17 @@ class FluidMemoryEngine:
                 )
 
                 for conflict in conflicts:
+                    # Assign a shared contradiction_cluster_id to the pair
+                    if not getattr(conflict, "contradiction_cluster_id", None):
+                        import uuid as _uuid
+                        cluster_id = str(_uuid.uuid4())
+                        conflict = conflict.model_copy(
+                            update={"contradiction_cluster_id": cluster_id}
+                        )
+                    else:
+                        assert conflict.contradiction_cluster_id is not None
+                        cluster_id = conflict.contradiction_cluster_id
+
                     await self.store.save_claim_conflict(conflict)
 
                     # Apply contradiction pressure to both nodes
@@ -226,6 +277,8 @@ class FluidMemoryEngine:
                                 1.0,
                                 s.contradiction_pressure + 0.15 * conflict.confidence,
                             )
+                            # Tag both nodes with the cluster ID
+                            s.contradiction_cluster_id = cluster_id
                             if self.audit:
                                 await self.audit.log_contradiction(
                                     node_id=nid,
