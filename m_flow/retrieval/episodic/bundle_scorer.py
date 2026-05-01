@@ -29,6 +29,14 @@ class EpisodeBundle:
     best_point_id: Optional[str] = None
     best_entity_id: Optional[str] = None
 
+    # Fluid scoring fields (v2 contract)
+    base_distance_score: Optional[float] = None
+    semantic_score: Optional[float] = None
+    graph_score: Optional[float] = None
+    fluid_effective_score: Optional[float] = None
+    final_distance_score: Optional[float] = None
+    fluid_score_explanation: Optional[dict] = None
+
 
 @dataclass
 class RelationshipIndex:
@@ -295,6 +303,7 @@ def compute_episode_bundles(
                     best_facet_id=best_facet_id,
                     best_point_id=best_point_id,
                     best_entity_id=best_entity_id,
+                    base_distance_score=best,  # Snapshot base distance score
                 )
             )
 

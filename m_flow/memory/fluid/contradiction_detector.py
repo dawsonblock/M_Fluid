@@ -249,8 +249,8 @@ class ContradictionDetector:
 
         except Exception as exc:
             self._logger.debug("fluid.contradiction: structured gate error: %s", exc)
-            # If gate check fails, allow through (fail open for safety)
-            return True
+            # If gate check fails, block contradiction (fail closed for safety)
+            return False
 
     async def _fetch_node_text(self, node_id: str) -> Optional[str]:
         """Fetch the summary/text of a node from the graph using graph_access helper."""

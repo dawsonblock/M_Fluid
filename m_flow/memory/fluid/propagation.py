@@ -9,52 +9,7 @@ from typing import Dict, List, Set, Tuple, Optional
 from collections import deque
 
 from m_flow.adapters.graph.graph_db_interface import GraphProvider
-
-
-async def get_connected_nodes(
-    graph_engine: GraphProvider,
-    node_id: str,
-    edge_types: Optional[List[str]] = None,
-) -> List[Tuple[str, str, float]]:
-    """
-    Get nodes connected to a given node.
-    
-    Args:
-        graph_engine: Graph database provider
-        node_id: Starting node ID
-        edge_types: Optional list of edge types to follow (None = all)
-        
-    Returns:
-        List of tuples (connected_node_id, edge_type, edge_weight)
-    """
-    # Query for connected nodes via Cypher
-    if edge_types:
-        type_filter = " OR ".join([f"type(r) = '{t}'" for t in edge_types])
-        cypher = f"""
-            MATCH (n)-[r]-(m)
-            WHERE n.id = $node_id AND ({type_filter})
-            RETURN m.id as connected_id, type(r) as edge_type, 
-                   coalesce(r.weight, 1.0) as weight
-        """
-    else:
-        cypher = """
-            MATCH (n)-[r]-(m)
-            WHERE n.id = $node_id
-            RETURN m.id as connected_id, type(r) as edge_type,
-                   coalesce(r.weight, 1.0) as weight
-        """
-    
-    result = await graph_engine.query(cypher, {"node_id": node_id})
-    
-    connections = []
-    for row in result:
-        connected_id = row.get("connected_id") or row.get("m.id")
-        edge_type = row.get("edge_type") or row.get("type(r)")
-        weight = row.get("weight") or row.get("coalesce(r.weight, 1.0)") or 1.0
-        if connected_id:
-            connections.append((str(connected_id), str(edge_type), float(weight)))
-    
-    return connections
+from m_flow.memory.fluid.graph_access import get_connected_nodes
 
 
 async def propagate_activation(

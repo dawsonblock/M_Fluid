@@ -22,52 +22,100 @@ sources:
     trust: 0.95
     legal_weight: 1.00
     decay_lane: legal
-    description: "Court judgments, orders, official court records"
+    description: Court judgments, orders, official records
+    authority: 1.00
+    verifiability: 0.95
+    originality: 1.00
+    independence: 0.95
+    legal_status: official_record
+    default_claim_status: presumed_true
 
   government_data:
     trust: 0.85
     legal_weight: 0.80
     decay_lane: legal
-    description: "Government datasets, official publications"
+    description: Government datasets and publications
+    authority: 0.95
+    verifiability: 0.85
+    originality: 0.90
+    independence: 0.80
+    legal_status: official_record
+    default_claim_status: presumed_true
 
   police_release:
     trust: 0.80
     legal_weight: 0.70
     decay_lane: legal
-    description: "Official police press releases and statements"
+    description: Official police press releases
+    authority: 0.85
+    verifiability: 0.75
+    originality: 0.95
+    independence: 0.70
+    legal_status: official_record
+    default_claim_status: needs_verification
 
   academic_paper:
     trust: 0.75
     legal_weight: 0.40
     decay_lane: normal
-    description: "Peer-reviewed academic publications"
+    description: Peer-reviewed academic publications
+    authority: 0.80
+    verifiability: 0.85
+    originality: 0.90
+    independence: 0.75
+    legal_status: verified
+    default_claim_status: needs_verification
 
   expert_report:
     trust: 0.70
     legal_weight: 0.50
     decay_lane: normal
-    description: "Expert witness reports and professional assessments"
+    description: Expert witness reports and assessments
+    authority: 0.75
+    verifiability: 0.70
+    originality: 0.85
+    independence: 0.70
+    legal_status: verified
+    default_claim_status: needs_verification
 
   witness_statement:
     trust: 0.50
     legal_weight: 0.40
     decay_lane: normal
-    description: "Witness statements and depositions"
+    description: Witness statements and depositions
+    authority: 0.60
+    verifiability: 0.50
+    originality: 0.95
+    independence: 0.85
+    legal_status: hearsay
+    default_claim_status: needs_verification
 
   mainstream_news:
     trust: 0.60
     legal_weight: 0.30
     decay_lane: normal
-    description: "Established news organisations"
+    description: Established news organisations
+    authority: 0.65
+    verifiability: 0.60
+    originality: 0.70
+    independence: 0.60
+    legal_status: unverified
+    default_claim_status: needs_verification
 
   blog_social:
     trust: 0.25
     legal_weight: 0.05
     decay_lane: short_term
-    description: "Blogs, social media, unverified sources"
+    description: Blogs, social media, unverified sources
+    authority: 0.30
+    verifiability: 0.20
+    originality: 0.60
+    independence: 0.40
+    legal_status: unverified
+    default_claim_status: presumed_false
 
   unknown:
     trust: 0.10
     legal_weight: 0.00
     decay_lane: normal
-    description: "Unclassified or unknown source type"
+    description: Unclassified or unknown source type

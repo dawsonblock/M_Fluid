@@ -65,6 +65,46 @@ def row_get(
     return default
 
 
+async def safe_query(
+    graph_engine: Any,
+    query: str,
+    params: Optional[dict] = None,
+) -> Any:
+    """
+    Execute a query with parameterized inputs where supported.
+
+    Tries parameterized query first (preferred for security).
+    Falls back to f-string interpolation if provider doesn't support parameters.
+
+    Args:
+        graph_engine: The graph provider/engine
+        query: Cypher query with $param placeholders
+        params: Dictionary of parameters
+
+    Returns:
+        Query result
+    """
+    if params:
+        try:
+            # Try parameterized query (preferred for security)
+            return await graph_engine.query(query, params)
+        except (TypeError, AttributeError) as exc:
+            # Provider may not support parameterized queries
+            # Fall back to safe interpolation for known-safe values
+            logger.debug(
+                "fluid.graph_access: parameterized query not supported, "
+                "falling back to interpolation: %s",
+                type(exc).__name__,
+            )
+            # For node_id and similar internal IDs, interpolation is acceptable
+            # as they are not user-supplied
+            interpolated = query
+            for key, value in params.items():
+                interpolated = interpolated.replace(f"${key}", f"'{value}'")
+            return await graph_engine.query(interpolated)
+    return await graph_engine.query(query)
+
+
 async def get_node_text(graph_engine: Any, node_id: str) -> Optional[str]:
     """
     Fetch text content for a node from the graph.
@@ -76,16 +116,17 @@ async def get_node_text(graph_engine: Any, node_id: str) -> Optional[str]:
     Returns:
         Node text or None if not found/error
     """
+    provider_name = _get_provider_name(graph_engine)
     try:
         # Try different query patterns common in M-flow
         queries = [
-            f"MATCH (n) WHERE n.id = '{node_id}' RETURN n.text as text",
-            f"MATCH (n {{id: '{node_id}'}}) RETURN n.text as text",
+            "MATCH (n) WHERE n.id = $node_id RETURN n.text as text",
+            "MATCH (n {id: $node_id}) RETURN n.text as text",
         ]
 
         for query in queries:
             try:
-                result = await graph_engine.query(query)
+                result = await safe_query(graph_engine, query, {"node_id": node_id})
                 if result:
                     rows = list(result)
                     if rows:
@@ -97,8 +138,8 @@ async def get_node_text(graph_engine: Any, node_id: str) -> Optional[str]:
 
         # Fallback: try to get any string property
         try:
-            props_query = f"MATCH (n) WHERE n.id = '{node_id}' RETURN properties(n) as props"
-            result = await graph_engine.query(props_query)
+            props_query = "MATCH (n) WHERE n.id = $node_id RETURN properties(n) as props"
+            result = await safe_query(graph_engine, props_query, {"node_id": node_id})
             if result:
                 rows = list(result)
                 if rows:
@@ -112,8 +153,9 @@ async def get_node_text(graph_engine: Any, node_id: str) -> Optional[str]:
 
     except Exception as exc:
         logger.warning(
-            "fluid.graph_access: failed to fetch text for node %s: %s (%s)",
+            "fluid.graph_access: failed to fetch text for node %s (provider=%s): %s (%s)",
             node_id,
+            provider_name,
             type(exc).__name__,
             exc,
         )
@@ -138,6 +180,7 @@ async def get_neighbour_ids(
         List of neighbor node IDs
     """
     neighbor_ids: List[str] = []
+    provider_name = _get_provider_name(graph_engine)
 
     try:
         # Try different edge patterns common in M-flow
@@ -146,12 +189,12 @@ async def get_neighbour_ids(
         for edge_type in edge_types:
             query = f"""
                 MATCH (n)-[:{edge_type}]-(m)
-                WHERE n.id = '{node_id}'
+                WHERE n.id = $node_id
                 RETURN m.id as neighbor_id
                 LIMIT {limit}
             """
             try:
-                result = await graph_engine.query(query)
+                result = await safe_query(graph_engine, query, {"node_id": node_id})
                 if result:
                     for row in result:
                         nid = row_get(row, ["neighbor_id", "m.id"], index=0, default=None)
@@ -164,14 +207,14 @@ async def get_neighbour_ids(
 
         # Fallback: generic neighbor query
         if not neighbor_ids:
-            generic_query = f"""
+            generic_query = """
                 MATCH (n)--(m)
-                WHERE n.id = '{node_id}'
+                WHERE n.id = $node_id
                 RETURN m.id as neighbor_id
-                LIMIT {limit}
+                LIMIT $limit
             """
             try:
-                result = await graph_engine.query(generic_query)
+                result = await safe_query(graph_engine, generic_query, {"node_id": node_id, "limit": limit})
                 if result:
                     for row in result:
                         nid = row_get(row, ["neighbor_id", "m.id"], index=0, default=None)
@@ -181,15 +224,17 @@ async def get_neighbour_ids(
                                 break
             except Exception as exc:
                 logger.debug(
-                    "fluid.graph_access: generic neighbor query failed for %s: %s",
+                    "fluid.graph_access: generic neighbor query failed for %s (provider=%s): %s",
                     node_id,
+                    provider_name,
                     exc,
                 )
 
     except Exception as exc:
         logger.warning(
-            "fluid.graph_access: failed to get neighbors for node %s: %s (%s)",
+            "fluid.graph_access: failed to get neighbors for node %s (provider=%s): %s (%s)",
             node_id,
+            provider_name,
             type(exc).__name__,
             exc,
         )
@@ -215,6 +260,7 @@ async def get_connected_nodes(
         Strength is a float [0-1] indicating connection weight
     """
     connections: List[Tuple[str, str, float]] = []
+    provider_name = _get_provider_name(graph_engine)
 
     try:
         types_to_query = edge_types if edge_types else ["has_facet", "involves_entity", "has_point", "supported_by"]
@@ -222,11 +268,11 @@ async def get_connected_nodes(
         for edge_type in types_to_query:
             query = f"""
                 MATCH (n)-[r:{edge_type}]-(m)
-                WHERE n.id = '{node_id}'
+                WHERE n.id = $node_id
                 RETURN m.id as neighbor_id, type(r) as edge_type, r.weight as weight
             """
             try:
-                result = await graph_engine.query(query)
+                result = await safe_query(graph_engine, query, {"node_id": node_id})
                 if result:
                     for row in result:
                         nid = row_get(row, ["neighbor_id", "m.id"], index=0, default=None)
@@ -244,8 +290,9 @@ async def get_connected_nodes(
 
     except Exception as exc:
         logger.warning(
-            "fluid.graph_access: failed to get connections for node %s: %s (%s)",
+            "fluid.graph_access: failed to get connections for node %s (provider=%s): %s (%s)",
             node_id,
+            provider_name,
             type(exc).__name__,
             exc,
         )

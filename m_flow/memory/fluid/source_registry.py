@@ -38,6 +38,14 @@ class SourceTrustEntry:
     decay_lane: str = "normal"        # "short_term" | "normal" | "legal"
     description: str = ""
 
+    # Structured trust profile fields (v2)
+    authority: float = 0.50          # Court/gov authority level
+    verifiability: float = 0.50      # Can be independently verified
+    originality: float = 0.50        # Primary vs secondary source
+    independence: float = 0.50      # Independent vs affiliated
+    legal_status: str = "unverified"  # official_record, hearsay, etc.
+    default_claim_status: str = "needs_verification"  # presumed_true, needs_verification, presumed_false
+
 
 # ---------------------------------------------------------------------------
 # SQLAlchemy model
@@ -64,15 +72,15 @@ _DEFAULT_YAML = os.path.join(
 )
 
 _HARDCODED_FALLBACK: Dict[str, SourceTrustEntry] = {
-    "court_record":      SourceTrustEntry("court_record",      0.95, 1.00, "legal",      "Court judgments, orders, official records"),
-    "government_data":   SourceTrustEntry("government_data",   0.85, 0.80, "legal",      "Government datasets and publications"),
-    "police_release":    SourceTrustEntry("police_release",    0.80, 0.70, "legal",      "Official police press releases"),
-    "academic_paper":    SourceTrustEntry("academic_paper",    0.75, 0.40, "normal",     "Peer-reviewed academic publications"),
-    "expert_report":     SourceTrustEntry("expert_report",     0.70, 0.50, "normal",     "Expert witness reports and assessments"),
-    "witness_statement": SourceTrustEntry("witness_statement", 0.50, 0.40, "normal",     "Witness statements and depositions"),
-    "mainstream_news":   SourceTrustEntry("mainstream_news",   0.60, 0.30, "normal",     "Established news organisations"),
-    "blog_social":       SourceTrustEntry("blog_social",       0.25, 0.05, "short_term", "Blogs, social media, unverified sources"),
-    "unknown":           SourceTrustEntry("unknown",           0.10, 0.00, "normal",     "Unclassified or unknown source type"),
+    "court_record":      SourceTrustEntry("court_record",      0.95, 1.00, "legal",      "Court judgments, orders, official records",      1.00, 0.95, 1.00, 0.95, "official_record", "presumed_true"),
+    "government_data":   SourceTrustEntry("government_data",   0.85, 0.80, "legal",      "Government datasets and publications",           0.95, 0.85, 0.90, 0.80, "official_record", "presumed_true"),
+    "police_release":    SourceTrustEntry("police_release",    0.80, 0.70, "legal",      "Official police press releases",                  0.85, 0.75, 0.95, 0.70, "official_record", "needs_verification"),
+    "academic_paper":    SourceTrustEntry("academic_paper",    0.75, 0.40, "normal",     "Peer-reviewed academic publications",              0.80, 0.85, 0.90, 0.75, "verified", "needs_verification"),
+    "expert_report":     SourceTrustEntry("expert_report",     0.70, 0.50, "normal",     "Expert witness reports and assessments",          0.75, 0.70, 0.85, 0.70, "verified", "needs_verification"),
+    "witness_statement": SourceTrustEntry("witness_statement", 0.50, 0.40, "normal",     "Witness statements and depositions",                0.60, 0.50, 0.95, 0.85, "hearsay", "needs_verification"),
+    "mainstream_news":   SourceTrustEntry("mainstream_news",   0.60, 0.30, "normal",     "Established news organisations",                   0.65, 0.60, 0.70, 0.60, "unverified", "needs_verification"),
+    "blog_social":       SourceTrustEntry("blog_social",       0.25, 0.05, "short_term", "Blogs, social media, unverified sources",          0.30, 0.20, 0.60, 0.40, "unverified", "presumed_false"),
+    "unknown":           SourceTrustEntry("unknown",           0.10, 0.00, "normal",     "Unclassified or unknown source type",             0.50, 0.50, 0.50, 0.50, "unverified", "needs_verification"),
 }
 
 
@@ -122,6 +130,24 @@ class SourceRegistry:
             or _HARDCODED_FALLBACK["unknown"]
         )
         return entry.trust, entry.legal_weight, entry.decay_lane
+
+    async def get_source_profile(self, source_type: Optional[str]) -> SourceTrustEntry:
+        """
+        Return full structured trust profile for a source type.
+
+        Resolves: DB → YAML → hardcoded fallback.
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        key = (source_type or "unknown").lower().replace(" ", "_")
+
+        return (
+            self._db_cache.get(key)
+            or self._yaml_cache.get(key)
+            or _HARDCODED_FALLBACK.get(key)
+            or _HARDCODED_FALLBACK["unknown"]
+        )
 
     async def upsert(self, entry: SourceTrustEntry) -> None:
         """Insert or update a source entry in the DB (runtime override)."""
@@ -188,6 +214,12 @@ def _load_yaml_registry() -> Dict[str, SourceTrustEntry]:
                 legal_weight=float(cfg.get("legal_weight", 0.00)),
                 decay_lane=str(cfg.get("decay_lane", "normal")),
                 description=str(cfg.get("description", "")),
+                authority=float(cfg.get("authority", 0.50)),
+                verifiability=float(cfg.get("verifiability", 0.50)),
+                originality=float(cfg.get("originality", 0.50)),
+                independence=float(cfg.get("independence", 0.50)),
+                legal_status=str(cfg.get("legal_status", "unverified")),
+                default_claim_status=str(cfg.get("default_claim_status", "needs_verification")),
             )
         return entries
     except Exception:

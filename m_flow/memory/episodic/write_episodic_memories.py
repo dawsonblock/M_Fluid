@@ -1035,9 +1035,10 @@ async def _fluid_touch_episodes(
     """
     from m_flow.base_config import get_base_config
     from m_flow.memory.fluid.config import get_fluid_config
-    from m_flow.memory.fluid.models import FluidUpdateEvent, get_source_weights
+    from m_flow.memory.fluid.models import FluidUpdateEvent
     from m_flow.memory.fluid.state_store import FluidStateStore
     from m_flow.memory.fluid.service_interface import LocalFluidMemoryService
+    from m_flow.memory.fluid.source_registry import SourceRegistry
 
     fluid_cfg = get_fluid_config()
     base_cfg = get_base_config()
@@ -1053,6 +1054,8 @@ async def _fluid_touch_episodes(
         db_password=fluid_cfg.db_password,
     )
     service = LocalFluidMemoryService(graph_engine, store)
+    registry = SourceRegistry(store._engine)
+    await registry.initialize()
 
     for node in out:
         if not isinstance(node, Episode):
@@ -1083,14 +1086,15 @@ async def _fluid_touch_episodes(
                     source_type = getattr(doc, "source_type", None) or getattr(doc, "type", None)
                 break
 
-        trust, legal = get_source_weights(source_type)
+        trust, legal, decay_lane = await registry.get_weights(source_type)
 
-        # Determine decay lane from source type
-        decay_lane = "normal"
-        if source_type and any(k in source_type.lower() for k in ("court", "government", "police")):
-            decay_lane = "legal"
-        elif source_type and any(k in source_type.lower() for k in ("blog", "social")):
-            decay_lane = "short_term"
+        # Map legacy lane names to canonical v2 lane names
+        lane_mapping = {
+            "normal": "interest",
+            "short_term": "attention",
+            "legal": "legal",
+        }
+        decay_lane = lane_mapping.get(decay_lane, "interest")
 
         event = FluidUpdateEvent(
             touched_node_ids=touched_ids,

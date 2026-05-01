@@ -52,6 +52,9 @@ _CORS_ORIGINS = ["http://localhost:3000"]
 # Mutation guard: destructive operations require explicit opt-in
 _MUTATION_ALLOWED = os.environ.get("MFLOW_MCP_ALLOW_MUTATION", "").lower() in ("true", "1", "yes")
 
+# CYPHER guard: raw Cypher queries require explicit opt-in
+_CYPHER_ALLOWED = os.environ.get("MFLOW_MCP_ALLOW_CYPHER", "").lower() in ("true", "1", "yes")
+
 
 def _check_mutation_allowed(tool_name: str) -> Optional[list]:
     """
@@ -68,6 +71,26 @@ def _check_mutation_allowed(tool_name: str) -> Optional[list]:
                     f"❌ {tool_name} is disabled by default for safety.\n"
                     "Set MFLOW_MCP_ALLOW_MUTATION=true to enable mutation operations.\n"
                     "Read/search tools (search, list_data, memorize_status) remain available."
+                ),
+            )
+        ]
+    return None
+
+
+def _check_cypher_allowed(tool_name: str) -> Optional[list]:
+    """
+    Check if Cypher query mode is allowed.
+
+    Returns error response if MFLOW_MCP_ALLOW_CYPHER is not set to true.
+    """
+    if not _CYPHER_ALLOWED:
+        return [
+            types.TextContent(
+                type="text",
+                text=(
+                    f"❌ {tool_name} with CYPHER mode is disabled by default for safety.\n"
+                    "Set MFLOW_MCP_ALLOW_CYPHER=true to enable raw Cypher queries.\n"
+                    "Other recall modes (TRIPLET_COMPLETION, EPISODIC, PROCEDURAL, CHUNKS_LEXICAL) remain available."
                 ),
             )
         ]
@@ -299,6 +322,11 @@ async def memorize(
         包含 task_id 和后台任务启动 / 完成信息的 TextContent 列表。
         失败时也会返回带 task_id 的错误说明，调用方可据此进一步排查。
     """
+    # Mutation guard check
+    guard = _check_mutation_allowed("memorize")
+    if guard:
+        return guard
+
     task_id = await _record_task_start("memorize", dataset_name=dataset_name)
     log_path = get_log_file_location()
 
@@ -376,6 +404,11 @@ async def save_interaction(data: str, wait: bool = False) -> list:
         包含 task_id 的 TextContent 列表，便于后续通过
         memorize_status(task_id=...) 查询任务结果。
     """
+    # Mutation guard check
+    guard = _check_mutation_allowed("save_interaction")
+    if guard:
+        return guard
+
     task_id = await _record_task_start("save_interaction")
     log_path = get_log_file_location()
 
@@ -465,6 +498,12 @@ async def search(
     list
         搜索结果
     """
+    # CYPHER guard check
+    if recall_mode.upper() == "CYPHER":
+        guard = _check_cypher_allowed("search")
+        if guard:
+            return guard
+
     # 参数验证：检查 recall_mode 是否有效
     VALID_MODES = {"CHUNKS_LEXICAL", "TRIPLET_COMPLETION", "CYPHER", "EPISODIC", "PROCEDURAL"}
     if recall_mode.upper() not in VALID_MODES:
@@ -875,6 +914,11 @@ async def learn(
     list
         学习结果
     """
+    # Mutation guard check
+    guard = _check_mutation_allowed("learn")
+    if guard:
+        return guard
+
     with redirect_stdout(sys.stderr):
         try:
             _log.info("开始学习: datasets=%s, episodes=%s, background=%s", datasets, episode_ids, run_in_background)

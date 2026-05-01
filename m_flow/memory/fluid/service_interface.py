@@ -112,7 +112,7 @@ class LocalFluidMemoryService:
         """
         from m_flow.shared.logging_utils import get_logger
         from m_flow.memory.fluid.scoring import (
-            compute_effective_score, explain_effective_score, fluid_score,
+            compute_effective_score, explain_effective_score,
         )
         from m_flow.memory.fluid.config import get_fluid_config
 
@@ -121,6 +121,9 @@ class LocalFluidMemoryService:
 
         if not bundles:
             return bundles
+
+        # Snapshot original scores for rollback on failure
+        original_scores = {b.episode_id: b.score for b in bundles}
 
         try:
             # Collect all distances for normalization
@@ -181,10 +184,22 @@ class LocalFluidMemoryService:
         except Exception as exc:
             logger.warning(
                 "fluid.service: apply_fluid_scores failed: %s (%s)",
-                type(exc).__name__, exc,
+                type(exc).__name__,
+                exc,
             )
             if cfg.fail_closed_on_scoring_error:
-                return bundles  # Return original bundles unchanged
+                # Rollback to original scores
+                for bundle in bundles:
+                    original = original_scores.get(bundle.episode_id)
+                    if original is not None:
+                        bundle.score = original
+                        # Clear partial fluid fields
+                        bundle.semantic_score = None
+                        bundle.graph_score = None
+                        bundle.fluid_effective_score = None
+                        bundle.final_distance_score = None
+                        bundle.fluid_score_explanation = None
+                return bundles
 
         return bundles
 
@@ -192,6 +207,7 @@ class LocalFluidMemoryService:
         """
         Compute graph proximity score from bundle's best_path.
 
+        best_path is a string enum value, not a list.
         Scores:
             direct_episode -> 1.00
             facet -> 0.85
@@ -200,23 +216,17 @@ class LocalFluidMemoryService:
             entity -> 0.65
             unknown -> 0.50
         """
-        best_path = getattr(bundle, "best_path", None)
-        if not best_path or not isinstance(best_path, (list, tuple)):
-            return 0.50  # unknown
+        path = str(getattr(bundle, "best_path", "")).lower()
 
-        # Get the last node type in path (closest to query)
-        path_str = str(best_path[-1]) if best_path else ""
-
-        if "episode" in path_str.lower() and "facet" not in path_str.lower():
+        if path == "direct_episode":
             return 1.00
-        elif "point" in path_str.lower():
+        if path == "facet":
+            return 0.85
+        if path == "facet_entity":
+            return 0.78
+        if path == "point":
             return 0.72
-        elif "facet" in path_str.lower():
-            # Check if also involves entity
-            if any("entity" in str(p).lower() for p in best_path):
-                return 0.78  # facet_entity
-            return 0.85  # facet only
-        elif "entity" in path_str.lower():
+        if path == "entity":
             return 0.65
 
         return 0.50  # unknown/default
