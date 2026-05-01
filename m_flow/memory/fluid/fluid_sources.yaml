@@ -7,11 +7,13 @@
 # Fields per source:
 #   trust        [0.0–1.0]  Base trust weight applied to fluid state
 #   legal_weight [0.0–1.0]  Weight for legal/evidential scoring
-#   decay_lane   string     "short_term" | "normal" | "legal"
+#   decay_lane   string     "attention" | "interest" | "trust" | "legal" | "contradiction"
 #                           Decay rates (per day):
-#                             short_term = 0.25
-#                             normal     = 0.02
-#                             legal      = 0.002
+#                             attention      = 0.20  (short-term, breaking news)
+#                             interest       = 0.05  (default, user engagement)
+#                             trust          = 0.000 (immutable, never decays)
+#                             legal          = 0.000 (immutable, court/gov)
+#                             contradiction  = 0.01  (pressure eases slowly)
 #   description  string     Human-readable note
 
 sources:

@@ -56,6 +56,12 @@ from m_flow.memory.fluid.scoring import (
 from m_flow.memory.fluid.citation_graph import CitationGraph
 from m_flow.memory.fluid.timeline import TimelineCompressor, TimelineEvent
 from m_flow.memory.fluid.jurisdiction import JurisdictionWeighter, get_jurisdiction_weighter
+from m_flow.memory.fluid.graph_access import (
+    row_get,
+    get_node_text,
+    get_neighbour_ids,
+    get_connected_nodes,
+)
 from m_flow.memory.fluid.state_store import (
     FluidStateStore,
     ActivationMergeUpdate,
@@ -78,6 +84,8 @@ __all__ = [
     "FluidMemoryState",
     "FluidUpdateEvent",
     "ClaimConflict",
+    "SourceLineageRecord",
+    "MediaAmplificationEvent",
     "ActivationMergeUpdate",
 
     # Source weights (sync shim)
@@ -89,6 +97,21 @@ __all__ = [
     "compute_fluid_boost",
     "explain_fluid_score",
     "should_boost_retrieval",
+    "compute_effective_score",
+    "explain_effective_score",
+
+    # JudgeTracker / legal features
+    "CitationGraph",
+    "TimelineCompressor",
+    "TimelineEvent",
+    "JurisdictionWeighter",
+    "get_jurisdiction_weighter",
+
+    # Graph access helpers
+    "row_get",
+    "get_node_text",
+    "get_neighbour_ids",
+    "get_connected_nodes",
 
     # Engine and Store
     "FluidMemoryEngine",

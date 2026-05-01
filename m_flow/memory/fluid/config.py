@@ -18,37 +18,48 @@ class FluidMemoryConfig(MflowSettings):
     Configuration for the Fluid Memory module.
 
     Environment variable mapping (all prefixed MFLOW_FLUID_):
-        MFLOW_FLUID_ENABLE              -> enable_fluid_memory
-        MFLOW_FLUID_ON_WRITE            -> enable_fluid_on_write
-        MFLOW_FLUID_ON_RETRIEVAL        -> enable_fluid_on_retrieval
-        MFLOW_FLUID_AUDIT               -> enable_fluid_audit
-        MFLOW_FLUID_CONTRADICTION       -> enable_fluid_contradiction
-        MFLOW_FLUID_DB_PROVIDER         -> fluid_db_provider
-        MFLOW_FLUID_DB_PATH             -> fluid_db_path
-        MFLOW_FLUID_DB_NAME             -> fluid_db_name
+        MFLOW_FLUID_ENABLE                      -> enable
+        MFLOW_FLUID_ENABLE_ON_WRITE             -> enable_on_write
+        MFLOW_FLUID_ENABLE_ON_RETRIEVAL         -> enable_on_retrieval
+        MFLOW_FLUID_ENABLE_AUDIT                -> enable_audit
+        MFLOW_FLUID_ENABLE_CONTRADICTION        -> enable_contradiction
+        MFLOW_FLUID_ENABLE_LLM_CONTRADICTION    -> enable_llm_contradiction
+        MFLOW_FLUID_DB_PROVIDER                 -> db_provider
+        MFLOW_FLUID_DB_PATH                     -> db_path
+        MFLOW_FLUID_DB_NAME                     -> db_name
 
     Decay lane constants (per-day rates):
-        SHORT_TERM_DECAY  = 0.25   # temporary attention
-        NORMAL_DECAY      = 0.02   # standard activation (default)
-        LEGAL_DECAY       = 0.002  # court/legal evidence
+        ATTENTION_DECAY      = 0.20   # short-term visibility (breaking news)
+        INTEREST_DECAY       = 0.05   # user/session engagement (default)
+        TRUST_DECAY          = 0.000  # provenance trust — immutable
+        LEGAL_DECAY          = 0.000  # court/legal evidence — immutable
+        CONTRADICTION_DECAY  = 0.01   # conflict pressure eases slowly
 
     Scoring:
-        max_boost_impact  = 0.15   # absolute cap on fluid score adjustment
-        max_boost_fraction = 0.30  # fluid boost ≤ 30% of base score
+        max_boost_impact     = 0.15   # absolute cap on fluid score adjustment
+        max_boost_fraction   = 0.30   # fluid boost ≤ 30% of base score
     """
 
     model_config = SettingsConfigDict(env_prefix="MFLOW_FLUID_")
 
-    # Master on/off switch
-    enable: bool = True
+    # Master on/off switch — DISABLED BY DEFAULT (safety)
+    enable: bool = False
 
-    # Per-integration-point flags
-    enable_on_write: bool = True
-    enable_on_retrieval: bool = True
+    # Per-integration-point flags — DISABLED BY DEFAULT
+    enable_on_write: bool = False
+    enable_on_retrieval: bool = False
 
     # Sub-feature flags
-    enable_audit: bool = True
-    enable_contradiction: bool = True
+    enable_audit: bool = True  # audit enabled when fluid is enabled
+    enable_contradiction: bool = False  # contradiction detection disabled by default
+
+    # LLM contradiction safety (disabled by default for legal/crime safety)
+    enable_llm_contradiction: bool = False
+    min_llm_contradiction_confidence: float = 0.75
+    structured_contradiction_required: bool = True
+
+    # Scoring safety: if True, return original bundles on scoring error
+    fail_closed_on_scoring_error: bool = False
 
     # Storage
     db_provider: str = "sqlite"

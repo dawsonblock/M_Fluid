@@ -100,46 +100,126 @@ class LocalFluidMemoryService:
         """
         Adjust retrieval bundle scores using fluid state.
 
-        Primary path (v2): uses compute_effective_score() when the bundle
-        exposes a similarity_score attribute (higher = better).
-
-        Fallback path (legacy): uses fluid_score() (distance-based,
-        lower = better) for bundles that only expose bundle.score.
+        Implements the full v2 scoring contract:
+        1. Normalize distance scores to semantic similarity [0, 1]
+        2. Compute graph_score from best_path in bundle
+        3. Call compute_effective_score(semantic, state, graph)
+        4. Convert back to distance score (lower-is-better)
+        5. Store explanation fields on bundle
 
         Skips bundles with no active fluid state (activation == 0.0).
         Failures are logged and original bundles returned intact.
         """
         from m_flow.shared.logging_utils import get_logger
-        from m_flow.memory.fluid.scoring import compute_effective_score, fluid_score
+        from m_flow.memory.fluid.scoring import (
+            compute_effective_score, explain_effective_score, fluid_score,
+        )
+        from m_flow.memory.fluid.config import get_fluid_config
 
         logger = get_logger("fluid.service")
+        cfg = get_fluid_config()
+
+        if not bundles:
+            return bundles
 
         try:
+            # Collect all distances for normalization
             episode_ids = [b.episode_id for b in bundles]
             states = await self._store.get_many(episode_ids)
             state_map = {s.node_id: s for s in states if s.activation > 0.0}
 
+            # Find min/max distances for normalization
+            distances = [b.score for b in bundles if hasattr(b, "score")]
+            if not distances:
+                return bundles
+
+            min_dist = min(distances)
+            max_dist = max(distances)
+            dist_range = max_dist - min_dist if max_dist > min_dist else 1.0
+
             for bundle in bundles:
+                # Store base distance score
+                if not hasattr(bundle, "base_distance_score"):
+                    bundle.base_distance_score = bundle.score
+
                 state = state_map.get(bundle.episode_id)
                 if not state:
                     continue
 
-                # v2 path: bundle exposes similarity_score (higher = better)
-                if hasattr(bundle, "similarity_score") and bundle.similarity_score is not None:
-                    graph_score = getattr(bundle, "graph_score", 0.0) or 0.0
-                    bundle.similarity_score = compute_effective_score(
-                        semantic_score=float(bundle.similarity_score),
-                        state=state,
-                        graph_score=float(graph_score),
-                    )
+                # Normalize distance to semantic similarity [0, 1]
+                # Lower distance = higher similarity
+                if dist_range > 0:
+                    semantic_score = 1.0 - ((bundle.score - min_dist) / dist_range)
                 else:
-                    # Legacy fallback: distance-based score (lower = better)
-                    bundle.score = fluid_score(bundle.score, state)
+                    semantic_score = 0.5  # All equal distances
+
+                # Compute graph_score from best_path if available
+                graph_score = self._compute_graph_score(bundle)
+
+                # Calculate effective score
+                effective = compute_effective_score(
+                    semantic_score=semantic_score,
+                    state=state,
+                    graph_score=graph_score,
+                )
+
+                # Store scoring metadata
+                bundle.semantic_score = semantic_score
+                bundle.graph_score = graph_score
+                bundle.fluid_effective_score = effective
+                bundle.fluid_score_explanation = explain_effective_score(
+                    semantic_score=semantic_score,
+                    state=state,
+                    graph_score=graph_score,
+                )
+
+                # Convert back to lower-is-better distance score
+                # effective is [0, 1] higher=better, so distance = 1 - effective
+                bundle.final_distance_score = 1.0 - effective
+                bundle.score = bundle.final_distance_score
 
         except Exception as exc:
-            logger.warning("fluid.service: apply_fluid_scores failed: %s", exc)
+            logger.warning(
+                "fluid.service: apply_fluid_scores failed: %s (%s)",
+                type(exc).__name__, exc,
+            )
+            if cfg.fail_closed_on_scoring_error:
+                return bundles  # Return original bundles unchanged
 
         return bundles
+
+    def _compute_graph_score(self, bundle) -> float:
+        """
+        Compute graph proximity score from bundle's best_path.
+
+        Scores:
+            direct_episode -> 1.00
+            facet -> 0.85
+            facet_entity -> 0.78
+            point -> 0.72
+            entity -> 0.65
+            unknown -> 0.50
+        """
+        best_path = getattr(bundle, "best_path", None)
+        if not best_path or not isinstance(best_path, (list, tuple)):
+            return 0.50  # unknown
+
+        # Get the last node type in path (closest to query)
+        path_str = str(best_path[-1]) if best_path else ""
+
+        if "episode" in path_str.lower() and "facet" not in path_str.lower():
+            return 1.00
+        elif "point" in path_str.lower():
+            return 0.72
+        elif "facet" in path_str.lower():
+            # Check if also involves entity
+            if any("entity" in str(p).lower() for p in best_path):
+                return 0.78  # facet_entity
+            return 0.85  # facet only
+        elif "entity" in path_str.lower():
+            return 0.65
+
+        return 0.50  # unknown/default
 
 
 # ---------------------------------------------------------------------------

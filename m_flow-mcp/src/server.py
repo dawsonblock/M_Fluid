@@ -49,6 +49,30 @@ _client: Optional[MflowClient] = None
 
 _CORS_ORIGINS = ["http://localhost:3000"]
 
+# Mutation guard: destructive operations require explicit opt-in
+_MUTATION_ALLOWED = os.environ.get("MFLOW_MCP_ALLOW_MUTATION", "").lower() in ("true", "1", "yes")
+
+
+def _check_mutation_allowed(tool_name: str) -> Optional[list]:
+    """
+    Check if mutation operations are allowed.
+
+    Returns error response if MFLOW_MCP_ALLOW_MUTATION is not set to true.
+    Read/search tools are always allowed.
+    """
+    if not _MUTATION_ALLOWED:
+        return [
+            types.TextContent(
+                type="text",
+                text=(
+                    f"❌ {tool_name} is disabled by default for safety.\n"
+                    "Set MFLOW_MCP_ALLOW_MUTATION=true to enable mutation operations.\n"
+                    "Read/search tools (search, list_data, memorize_status) remain available."
+                ),
+            )
+        ]
+    return None
+
 
 # ============================================================
 # Background-task tracking (issue #111)
@@ -626,6 +650,11 @@ async def delete(data_id: str, dataset_id: str, mode: str = "soft") -> list:
     list
         删除结果
     """
+    # Mutation guard check
+    guard = _check_mutation_allowed("delete")
+    if guard:
+        return guard
+
     # 参数验证：检查 mode 是否有效，并标准化为小写
     VALID_MODES = {"soft", "hard"}
     mode_lower = mode.lower()
@@ -691,6 +720,11 @@ async def prune(
     list
         操作结果
     """
+    # Mutation guard check
+    guard = _check_mutation_allowed("prune")
+    if guard:
+        return guard
+
     with redirect_stdout(sys.stderr):
         try:
             # 先清除数据
@@ -890,6 +924,11 @@ async def update_data(
     list
         更新结果
     """
+    # Mutation guard check
+    guard = _check_mutation_allowed("update_data")
+    if guard:
+        return guard
+
     from uuid import UUID
 
     with redirect_stdout(sys.stderr):
@@ -941,6 +980,10 @@ async def ingest(
     list
         入库结果
     """
+    # Mutation guard check
+    guard = _check_mutation_allowed("ingest")
+    if guard:
+        return guard
     with redirect_stdout(sys.stderr):
         try:
             _log.info("开始入库: dataset=%s, data_length=%d, skip_memorize=%s", dataset_name, len(data), skip_memorize)

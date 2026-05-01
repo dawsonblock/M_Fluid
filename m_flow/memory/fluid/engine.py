@@ -292,28 +292,27 @@ class FluidMemoryEngine:
             logger.warning("fluid.engine: contradiction detection failed: %s", exc)
 
     async def _fetch_node_text(self, node_id: str) -> Optional[str]:
-        """Fetch a node's summary text from the graph."""
+        """Fetch a node's summary text from the graph using graph_access helper."""
+        from m_flow.memory.fluid.graph_access import get_node_text
         try:
-            rows = await self.graph.query(
-                "MATCH (n {id: $id}) "
-                "RETURN coalesce(n.summary, n.search_text, n.name, '') AS text LIMIT 1",
-                {"id": node_id},
+            return await get_node_text(self.graph, node_id)
+        except Exception as exc:
+            logger.warning(
+                "fluid.engine: graph fetch failed for %s: %s (%s)",
+                node_id, type(exc).__name__, exc,
             )
-            if rows:
-                return str(rows[0].get("text", "")).strip() or None
-        except Exception:
-            pass
-        return None
+            return None
 
     async def _get_neighbour_ids(self, node_id: str, limit: int = 5) -> List[str]:
-        """Get IDs of nodes connected to node_id via any edge."""
+        """Get IDs of nodes connected to node_id using graph_access helper."""
+        from m_flow.memory.fluid.graph_access import get_neighbour_ids
         try:
-            rows = await self.graph.query(
-                "MATCH (n {id: $id})--(m) RETURN m.id AS nid LIMIT $limit",
-                {"id": node_id, "limit": limit},
+            return await get_neighbour_ids(self.graph, node_id, limit)
+        except Exception as exc:
+            logger.warning(
+                "fluid.engine: neighbor fetch failed for %s: %s (%s)",
+                node_id, type(exc).__name__, exc,
             )
-            return [str(r["nid"]) for r in rows if r.get("nid")]
-        except Exception:
             return []
 
     async def get_state(self, node_id: str) -> Optional[FluidMemoryState]:

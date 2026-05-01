@@ -2,6 +2,23 @@
 
 A mutable operational state layer for M-flow that creates a "water effect" in memory: when one source touches a node, nearby memory ripples with activation changes.
 
+## ⚠️ Safety Notice
+
+**Fluid Memory is opt-in and disabled by default.** It must be explicitly enabled via environment variables:
+
+```bash
+MFLOW_FLUID_ENABLE=true
+MFLOW_FLUID_ENABLE_ON_WRITE=true
+MFLOW_FLUID_ENABLE_ON_RETRIEVAL=true
+```
+
+**Core principles for legal/crime/judge-tracking use:**
+- Raw evidence is **immutable** — fluid state never changes source documents
+- Fluid state only affects **retrieval ranking**, not truth
+- Contradiction pressure does **not delete** evidence
+- Media amplification is **attention, not truth**
+- LLM contradiction detection is **disabled by default**
+
 ## Core Concept
 
 **Raw evidence never changes.** Graph links change carefully. **Fluid state changes constantly.** Summaries can be regenerated from evidence + current state.
@@ -154,11 +171,19 @@ When a node is touched:
 
 Propagation follows edges: `has_facet`, `has_point`, `involves_entity`, `supported_by`, `includes_chunk`, `same_entity_as`.
 
-## Decay
+## Decay (5-Lane Model)
 
-Activation decays exponentially: `activation * exp(-decay_rate * time_elapsed)`
+Activation decays exponentially per **day** (not per second):
+`activation * exp(-decay_rate * days_elapsed)`
 
-Default decay_rate is 0.01, meaning ~1% decay per second of elapsed time.
+**Lane constants (per-day rates):**
+- `attention` = 0.20 / day — short-term visibility (breaking news)
+- `interest` = 0.05 / day — user/session engagement (default lane)
+- `trust` = 0.000 / day — provenance trust (**immutable, never decays**)
+- `legal` = 0.000 / day — court/gov evidence (**immutable, never decays**)
+- `contradiction` = 0.01 / day — conflict pressure eases slowly
+
+**Important:** Only `activation` and `recency_score` decay. Source trust, legal weight, and confidence are never decayed.
 
 ## Testing
 

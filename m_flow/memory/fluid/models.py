@@ -121,6 +121,7 @@ class ClaimConflict(BaseModel):
     confidence: float = 0.0           # LLM confidence in conflict detection
     detected_at: float = Field(default_factory=time)
     contradiction_cluster_id: Optional[str] = None  # shared UUID across conflict group
+    conflict_status: str = "needs_review"  # confirmed_conflict, possible_conflict, needs_review, resolved, rejected
 
 
 class SourceLineageRecord(BaseModel):

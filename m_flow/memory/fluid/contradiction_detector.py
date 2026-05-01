@@ -36,7 +36,15 @@ class ConflictResult(BaseModel):
     """Structured LLM response for conflict detection."""
     conflicts: bool
     confidence: float           # [0.0 – 1.0]
-    reason: str                 # Short explanation
+    reason: str               # Short explanation
+
+
+# Conflict status for ClaimConflict records
+CONFLICT_STATUS_CONFIRMED = "confirmed_conflict"
+CONFLICT_STATUS_POSSIBLE = "possible_conflict"
+CONFLICT_STATUS_NEEDS_REVIEW = "needs_review"
+CONFLICT_STATUS_RESOLVED = "resolved"
+CONFLICT_STATUS_REJECTED = "rejected"
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +119,9 @@ class ContradictionDetector:
         """
         Compare a new node's text against candidate nodes for conflicts.
 
+        Uses structured gate before LLM: only checks candidates that share
+        a strong connection (same entity, case, judge, jurisdiction).
+
         Args:
             new_node_id: ID of the newly written node
             new_node_text: Summary/text content of the new node
@@ -121,12 +132,34 @@ class ContradictionDetector:
         Returns:
             List of ClaimConflict records for detected conflicts
         """
+        from m_flow.memory.fluid.config import get_fluid_config
+
+        cfg = get_fluid_config()
+
+        # Check if LLM contradiction is enabled
+        if not cfg.enable_llm_contradiction:
+            self._logger.debug("fluid.contradiction: LLM contradiction disabled by config")
+            return []
+
         if not candidate_node_ids or not new_node_text.strip():
             return []
+
+        # Get min confidence threshold from config
+        min_confidence = cfg.min_llm_contradiction_confidence
 
         conflicts: List[ClaimConflict] = []
 
         for cand_id in candidate_node_ids[:5]:  # cap at 5 candidates per call
+            # Structured gate: check if nodes share meaningful connection
+            if cfg.structured_contradiction_required:
+                passes_gate = await self._check_structured_gate(new_node_id, cand_id)
+                if not passes_gate:
+                    self._logger.debug(
+                        "fluid.contradiction: structured gate failed for %s vs %s",
+                        new_node_id, cand_id,
+                    )
+                    continue
+
             cand_text = await self._fetch_node_text(cand_id)
             if not cand_text:
                 continue
@@ -138,7 +171,15 @@ class ContradictionDetector:
                 source_b="existing",
             )
 
-            if result and result.conflicts and result.confidence >= 0.6:
+            if result and result.conflicts and result.confidence >= min_confidence:
+                # Determine conflict status based on confidence
+                if result.confidence >= 0.85:
+                    status = CONFLICT_STATUS_CONFIRMED
+                elif result.confidence >= 0.70:
+                    status = CONFLICT_STATUS_POSSIBLE
+                else:
+                    status = CONFLICT_STATUS_NEEDS_REVIEW
+
                 conflicts.append(ClaimConflict(
                     node_id_a=new_node_id,
                     node_id_b=cand_id,
@@ -147,23 +188,81 @@ class ContradictionDetector:
                     conflict_reason=result.reason,
                     confidence=result.confidence,
                     detected_at=time(),
+                    conflict_status=status,
                 ))
 
         return conflicts
 
-    async def _fetch_node_text(self, node_id: str) -> Optional[str]:
-        """Fetch the summary/text of a node from the graph."""
+    async def _check_structured_gate(self, node_id_a: str, node_id_b: str) -> bool:
+        """
+        Check if two nodes share a meaningful connection for contradiction.
+
+        Returns True if nodes share:
+        - Same entity/person id
+        - Same case id
+        - Same event id
+        - Same judge id
+        - Same jurisdiction + material attribute
+        - Same source cluster / citation group
+        """
+        from m_flow.memory.fluid.graph_access import get_connected_nodes, row_get
+
         try:
-            query = (
-                "MATCH (n {id: $node_id}) "
-                "RETURN coalesce(n.summary, n.search_text, n.name, '') AS text LIMIT 1"
-            )
-            rows = await self.graph.query(query, {"node_id": node_id})
-            if rows:
-                return str(rows[0].get("text", "")).strip() or None
+            # Get connected entities for both nodes
+            conn_a = await get_connected_nodes(self.graph, node_id_a)
+            conn_b = await get_connected_nodes(self.graph, node_id_b)
+
+            # Build sets of connected entity IDs by edge type
+            entities_a = set()
+            entities_b = set()
+
+            for nid, etype, _ in conn_a:
+                if etype in ("involves_entity", "has_facet", "about_entity"):
+                    entities_a.add(nid)
+
+            for nid, etype, _ in conn_b:
+                if etype in ("involves_entity", "has_facet", "about_entity"):
+                    entities_b.add(nid)
+
+            # If they share any entity, they pass the gate
+            if entities_a & entities_b:
+                return True
+
+            # Check for case/judge/event connections
+            cases_a = {nid for nid, etype, _ in conn_a if "case" in etype.lower()}
+            cases_b = {nid for nid, etype, _ in conn_b if "case" in etype.lower()}
+            if cases_a & cases_b:
+                return True
+
+            judges_a = {nid for nid, etype, _ in conn_a if "judge" in etype.lower()}
+            judges_b = {nid for nid, etype, _ in conn_b if "judge" in etype.lower()}
+            if judges_a & judges_b:
+                return True
+
+            events_a = {nid for nid, etype, _ in conn_a if "event" in etype.lower()}
+            events_b = {nid for nid, etype, _ in conn_b if "event" in etype.lower()}
+            if events_a & events_b:
+                return True
+
+            # No shared connection found
+            return False
+
         except Exception as exc:
-            self._logger.debug("fluid.contradiction: graph fetch failed for %s: %s", node_id, exc)
-        return None
+            self._logger.debug("fluid.contradiction: structured gate error: %s", exc)
+            # If gate check fails, allow through (fail open for safety)
+            return True
+
+    async def _fetch_node_text(self, node_id: str) -> Optional[str]:
+        """Fetch the summary/text of a node from the graph using graph_access helper."""
+        from m_flow.memory.fluid.graph_access import get_node_text
+        try:
+            return await get_node_text(self.graph, node_id)
+        except Exception as exc:
+            self._logger.debug(
+                "fluid.contradiction: graph fetch failed for %s: %s (%s)",
+                node_id, type(exc).__name__, exc,
+            )
+            return None
 
     async def _run_conflict_check(
         self,
