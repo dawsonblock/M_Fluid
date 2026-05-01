@@ -6,7 +6,6 @@ Clean, bounded API with safe defaults.
 """
 
 from datetime import datetime
-from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from m_flow.judge_memory.config import JudgeMemoryConfig
@@ -22,7 +21,7 @@ from m_flow.judge_memory.evidence import EvidenceStorage, compute_content_hash
 from m_flow.judge_memory.claims import ClaimsManager
 from m_flow.judge_memory.search import JudgeMemorySearch
 from m_flow.judge_memory.fluid_adapter import FluidMemoryAdapter
-from m_flow.judge_memory.exceptions import EvidenceNotFoundError, ClaimNotFoundError
+from m_flow.judge_memory.exceptions import EvidenceNotFoundError
 
 
 class JudgeMemoryService:
@@ -47,11 +46,17 @@ class JudgeMemoryService:
         self.evidence_storage = EvidenceStorage(config)
 
         # Initialize managers
-        self.claims_manager = ClaimsManager(self.storage, source_registry=None)
-        self.search_engine = JudgeMemorySearch(self.storage, source_registry=None)
+        self.claims_manager = ClaimsManager(
+            self.storage, source_registry=None
+        )
+        self.search_engine = JudgeMemorySearch(
+            self.storage, source_registry=None
+        )
 
         # Initialize fluid adapter (may be disabled)
-        self.fluid = FluidMemoryAdapter(config, source_registry=None)
+        self.fluid = FluidMemoryAdapter(
+            config, source_registry=None
+        )
 
     # -------------------------------------------------------------------------
     # Evidence operations
@@ -104,7 +109,9 @@ class JudgeMemoryService:
 
         return db_record
 
-    async def get_source_packet(self, evidence_id: str) -> Optional[SourcePacket]:
+    async def get_source_packet(
+        self, evidence_id: str
+    ) -> Optional[SourcePacket]:
         """
         Get source packet with trust profile.
 
@@ -125,8 +132,6 @@ class JudgeMemoryService:
 
         # Try to get from source registry
         try:
-            from m_flow.memory.fluid.source_registry import SourceRegistry
-            # Fallback values from hardcoded
             from m_flow.memory.fluid.source_registry import _HARDCODED_FALLBACK
 
             profile = _HARDCODED_FALLBACK.get(

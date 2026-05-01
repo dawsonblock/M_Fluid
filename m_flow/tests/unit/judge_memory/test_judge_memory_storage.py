@@ -7,12 +7,9 @@ Tests SQLite storage for evidence, claims, and deduplication.
 import pytest
 import tempfile
 from pathlib import Path
-from datetime import datetime
-
 from m_flow.judge_memory.config import JudgeMemoryConfig
 from m_flow.judge_memory.storage import JudgeMemoryStorage
 from m_flow.judge_memory.models import EvidenceRecord, ClaimRecord
-from m_flow.judge_memory.exceptions import EvidenceNotFoundError
 
 
 @pytest.fixture
@@ -60,6 +57,7 @@ def test_duplicate_hash_returns_same_evidence(temp_storage):
 
     # Store first time
     result1 = temp_storage.store_evidence(evidence1)
+    assert result1.evidence_id == "ev_test_001"
 
     # Try to store with same hash but different ID
     evidence2 = EvidenceRecord(
@@ -156,6 +154,6 @@ def test_reject_claim_for_missing_evidence(temp_storage):
 
     # Should still store (SQLite doesn't enforce FK by default)
     # But our claims manager should check
-    result = temp_storage.store_claim(claim)
+    temp_storage.store_claim(claim)
     # Verify the evidence doesn't exist
     assert temp_storage.get_evidence("ev_nonexistent") is None
