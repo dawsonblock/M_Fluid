@@ -1071,7 +1071,7 @@ async def query(
         - "triplet": 三元组补全
         - "chunks": 原始文本块
         - "procedural": 程序性记忆
-        - "cypher": 直接 Cypher 查询
+        - "cypher": 直接 Cypher 查询 (默认禁用，需设置 MFLOW_MCP_ALLOW_CYPHER=true)
     top_k : int, optional
         返回结果数量 (默认: 10)
 
@@ -1086,6 +1086,12 @@ async def query(
         return [
             types.TextContent(type="text", text=f"❌ 无效的查询模式: {mode}\n有效值: {', '.join(sorted(VALID_MODES))}")
         ]
+
+    # Guard cypher mode - requires MFLOW_MCP_ALLOW_CYPHER=true
+    if mode.lower() == "cypher":
+        guard = _check_cypher_allowed("query")
+        if guard:
+            return guard
 
     # 参数验证：检查 top_k 是否有效
     if top_k < 1 or top_k > 100:

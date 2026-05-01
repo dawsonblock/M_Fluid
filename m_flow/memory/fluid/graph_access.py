@@ -7,12 +7,34 @@ Provides safe, logged access to graph data for fluid memory operations.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any, List, Optional, Tuple
 
 from m_flow.shared.logging_utils import get_logger
 
 logger = get_logger("fluid.graph_access")
+
+# Strict allowlist for graph identifiers: letters, numbers, underscore, dash, colon, dot
+_GRAPH_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\:\.]+$")
+
+
+def validate_graph_identifier(value: str) -> bool:
+    """
+    Validate a graph identifier (node_id, edge_type, etc.) against safe characters.
+
+    Allows only: letters, numbers, underscore, dash, colon, dot.
+    This prevents Cypher injection attacks through identifier parameters.
+
+    Args:
+        value: The identifier to validate
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if not value:
+        return False
+    return bool(_GRAPH_ID_PATTERN.match(value))
 
 
 def row_get(
@@ -69,38 +91,56 @@ async def safe_query(
     graph_engine: Any,
     query: str,
     params: Optional[dict] = None,
+    provider_name: str = "unknown",
+    operation: str = "query",
 ) -> Any:
     """
     Execute a query with parameterized inputs where supported.
 
     Tries parameterized query first (preferred for security).
-    Falls back to f-string interpolation if provider doesn't support parameters.
+    Falls back to validated interpolation only if all parameters pass
+    strict allowlist validation.
 
     Args:
         graph_engine: The graph provider/engine
         query: Cypher query with $param placeholders
         params: Dictionary of parameters
+        provider_name: Name of the graph provider for logging
+        operation: Operation description for logging
 
     Returns:
-        Query result
+        Query result or empty list if validation fails
     """
+    # Validate all string parameters before any query execution
+    if params:
+        for key, value in params.items():
+            if isinstance(value, str) and not validate_graph_identifier(value):
+                logger.warning(
+                    "fluid.graph_access: unsafe identifier rejected: "
+                    "provider=%s operation=%s param=%s value=%s",
+                    provider_name, operation, key, value
+                )
+                return []
+
     if params:
         try:
             # Try parameterized query (preferred for security)
             return await graph_engine.query(query, params)
         except (TypeError, AttributeError) as exc:
             # Provider may not support parameterized queries
-            # Fall back to safe interpolation for known-safe values
+            # Fall back to validated interpolation
             logger.debug(
                 "fluid.graph_access: parameterized query not supported, "
-                "falling back to interpolation: %s",
-                type(exc).__name__,
+                "falling back to interpolation: provider=%s operation=%s error=%s",
+                provider_name, operation, type(exc).__name__
             )
-            # For node_id and similar internal IDs, interpolation is acceptable
-            # as they are not user-supplied
+            # All parameters have been validated above
             interpolated = query
             for key, value in params.items():
-                interpolated = interpolated.replace(f"${key}", f"'{value}'")
+                if isinstance(value, str):
+                    interpolated = interpolated.replace(f"${key}", f"'{value}'")
+                else:
+                    interpolated = interpolated.replace(f"${key}", str(value))
             return await graph_engine.query(interpolated)
     return await graph_engine.query(query)
 

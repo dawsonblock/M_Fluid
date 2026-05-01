@@ -131,30 +131,36 @@ class LocalFluidMemoryService:
             states = await self._store.get_many(episode_ids)
             state_map = {s.node_id: s for s in states if s.activation > 0.0}
 
-            # Find min/max distances for normalization
-            distances = [b.score for b in bundles if hasattr(b, "score")]
+            # Store base distance scores before any mutation
+            for bundle in bundles:
+                if not hasattr(bundle, "base_distance_score") or bundle.base_distance_score is None:
+                    bundle.base_distance_score = bundle.score
+
+            # Find min/max distances for normalization using base_distance_score
+            distances = [b.base_distance_score for b in bundles if hasattr(b, "base_distance_score") and b.base_distance_score is not None]
+            if not distances:
+                distances = [b.score for b in bundles if hasattr(b, "score")]
             if not distances:
                 return bundles
 
             min_dist = min(distances)
             max_dist = max(distances)
-            dist_range = max_dist - min_dist if max_dist > min_dist else 1.0
+            dist_range = max_dist - min_dist
 
             for bundle in bundles:
-                # Store base distance score
-                if not hasattr(bundle, "base_distance_score"):
-                    bundle.base_distance_score = bundle.score
-
                 state = state_map.get(bundle.episode_id)
                 if not state:
                     continue
 
+                # Use base_distance_score for normalization (not mutated bundle.score)
+                base_score = getattr(bundle, "base_distance_score", None) or bundle.score
+
                 # Normalize distance to semantic similarity [0, 1]
                 # Lower distance = higher similarity
                 if dist_range > 0:
-                    semantic_score = 1.0 - ((bundle.score - min_dist) / dist_range)
+                    semantic_score = 1.0 - ((base_score - min_dist) / dist_range)
                 else:
-                    semantic_score = 0.5  # All equal distances
+                    semantic_score = 0.5  # All equal distances -> neutral similarity
 
                 # Compute graph_score from best_path if available
                 graph_score = self._compute_graph_score(bundle)

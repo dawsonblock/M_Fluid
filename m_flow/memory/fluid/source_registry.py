@@ -43,8 +43,22 @@ class SourceTrustEntry:
     verifiability: float = 0.50      # Can be independently verified
     originality: float = 0.50        # Primary vs secondary source
     independence: float = 0.50      # Independent vs affiliated
-    legal_status: str = "unverified"  # official_record, hearsay, etc.
+    legal_status_label: str = "unverified"  # official_record, hearsay, etc.
+    legal_status_weight: float = 0.50       # Numeric legal authority weight
     default_claim_status: str = "needs_verification"  # presumed_true, needs_verification, presumed_false
+
+    def derive_trust(self) -> float:
+        """
+        Derive trust from structured profile fields.
+        Weights: authority=0.30, verifiability=0.30, originality=0.20, independence=0.20
+        Returns weighted average for explainable trust calculation.
+        """
+        return (
+            self.authority * 0.30 +
+            self.verifiability * 0.30 +
+            self.originality * 0.20 +
+            self.independence * 0.20
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +76,15 @@ class SourceRegistryRecord(ModelBase):
     decay_lane: Mapped[str] = mapped_column(String(20), default="normal")
     description: Mapped[str] = mapped_column(String(500), default="")
 
+    # Structured trust profile fields (v2) - nullable for backward compatibility
+    authority: Mapped[float] = mapped_column(Float, nullable=True, default=0.50)
+    verifiability: Mapped[float] = mapped_column(Float, nullable=True, default=0.50)
+    originality: Mapped[float] = mapped_column(Float, nullable=True, default=0.50)
+    independence: Mapped[float] = mapped_column(Float, nullable=True, default=0.50)
+    legal_status_label: Mapped[str] = mapped_column(String(50), nullable=True, default="unverified")
+    legal_status_weight: Mapped[float] = mapped_column(Float, nullable=True, default=0.50)
+    default_claim_status: Mapped[str] = mapped_column(String(50), nullable=True, default="needs_verification")
+
 
 # ---------------------------------------------------------------------------
 # Default YAML path
@@ -71,16 +94,47 @@ _DEFAULT_YAML = os.path.join(
     os.path.dirname(__file__), "fluid_sources.yaml"
 )
 
+def _make_entry(
+    source_type: str,
+    trust: float,
+    legal_weight: float,
+    decay_lane: str,
+    description: str,
+    authority: float = 0.50,
+    verifiability: float = 0.50,
+    originality: float = 0.50,
+    independence: float = 0.50,
+    legal_status_label: str = "unverified",
+    legal_status_weight: float = 0.50,
+    default_claim_status: str = "needs_verification",
+) -> SourceTrustEntry:
+    """Helper to create SourceTrustEntry with named parameters."""
+    return SourceTrustEntry(
+        source_type=source_type,
+        trust=trust,
+        legal_weight=legal_weight,
+        decay_lane=decay_lane,
+        description=description,
+        authority=authority,
+        verifiability=verifiability,
+        originality=originality,
+        independence=independence,
+        legal_status_label=legal_status_label,
+        legal_status_weight=legal_status_weight,
+        default_claim_status=default_claim_status,
+    )
+
+
 _HARDCODED_FALLBACK: Dict[str, SourceTrustEntry] = {
-    "court_record":      SourceTrustEntry("court_record",      0.95, 1.00, "legal",      "Court judgments, orders, official records",      1.00, 0.95, 1.00, 0.95, "official_record", "presumed_true"),
-    "government_data":   SourceTrustEntry("government_data",   0.85, 0.80, "legal",      "Government datasets and publications",           0.95, 0.85, 0.90, 0.80, "official_record", "presumed_true"),
-    "police_release":    SourceTrustEntry("police_release",    0.80, 0.70, "legal",      "Official police press releases",                  0.85, 0.75, 0.95, 0.70, "official_record", "needs_verification"),
-    "academic_paper":    SourceTrustEntry("academic_paper",    0.75, 0.40, "normal",     "Peer-reviewed academic publications",              0.80, 0.85, 0.90, 0.75, "verified", "needs_verification"),
-    "expert_report":     SourceTrustEntry("expert_report",     0.70, 0.50, "normal",     "Expert witness reports and assessments",          0.75, 0.70, 0.85, 0.70, "verified", "needs_verification"),
-    "witness_statement": SourceTrustEntry("witness_statement", 0.50, 0.40, "normal",     "Witness statements and depositions",                0.60, 0.50, 0.95, 0.85, "hearsay", "needs_verification"),
-    "mainstream_news":   SourceTrustEntry("mainstream_news",   0.60, 0.30, "normal",     "Established news organisations",                   0.65, 0.60, 0.70, 0.60, "unverified", "needs_verification"),
-    "blog_social":       SourceTrustEntry("blog_social",       0.25, 0.05, "short_term", "Blogs, social media, unverified sources",          0.30, 0.20, 0.60, 0.40, "unverified", "presumed_false"),
-    "unknown":           SourceTrustEntry("unknown",           0.10, 0.00, "normal",     "Unclassified or unknown source type",             0.50, 0.50, 0.50, 0.50, "unverified", "needs_verification"),
+    "court_record":      _make_entry("court_record",      0.95, 1.00, "legal",      "Court judgments, orders, official records",      1.00, 0.95, 1.00, 0.95, "official_record", 0.95, "presumed_true"),
+    "government_data":   _make_entry("government_data",   0.85, 0.80, "legal",      "Government datasets and publications",           0.95, 0.85, 0.90, 0.80, "official_record", 0.90, "presumed_true"),
+    "police_release":    _make_entry("police_release",    0.80, 0.70, "legal",      "Official police press releases",                  0.85, 0.75, 0.95, 0.70, "official_record", 0.80, "needs_verification"),
+    "academic_paper":    _make_entry("academic_paper",    0.75, 0.40, "interest",   "Peer-reviewed academic publications",              0.80, 0.85, 0.90, 0.75, "verified", 0.70, "needs_verification"),
+    "expert_report":     _make_entry("expert_report",     0.70, 0.50, "interest",   "Expert witness reports and assessments",          0.75, 0.70, 0.85, 0.70, "verified", 0.70, "needs_verification"),
+    "witness_statement": _make_entry("witness_statement", 0.50, 0.40, "interest",   "Witness statements and depositions",                0.60, 0.50, 0.95, 0.85, "hearsay", 0.50, "needs_verification"),
+    "mainstream_news":   _make_entry("mainstream_news",   0.60, 0.30, "interest",   "Established news organisations",                   0.65, 0.60, 0.70, 0.60, "unverified", 0.50, "needs_verification"),
+    "blog_social":       _make_entry("blog_social",       0.25, 0.05, "attention",  "Blogs, social media, unverified sources",          0.30, 0.20, 0.60, 0.40, "unverified", 0.20, "presumed_false"),
+    "unknown":           _make_entry("unknown",           0.10, 0.00, "interest",   "Unclassified or unknown source type",             0.50, 0.50, 0.50, 0.50, "unverified", 0.50, "needs_verification"),
 }
 
 
@@ -151,25 +205,30 @@ class SourceRegistry:
 
     async def upsert(self, entry: SourceTrustEntry) -> None:
         """Insert or update a source entry in the DB (runtime override)."""
+        values = {
+            "trust": entry.trust,
+            "legal_weight": entry.legal_weight,
+            "decay_lane": entry.decay_lane,
+            "description": entry.description,
+            "authority": entry.authority,
+            "verifiability": entry.verifiability,
+            "originality": entry.originality,
+            "independence": entry.independence,
+            "legal_status_label": entry.legal_status_label,
+            "legal_status_weight": entry.legal_status_weight,
+            "default_claim_status": entry.default_claim_status,
+        }
         async with self._engine.sessionmaker() as session:
             result = await session.execute(
                 update(SourceRegistryRecord)
                 .where(SourceRegistryRecord.source_type == entry.source_type)
-                .values(
-                    trust=entry.trust,
-                    legal_weight=entry.legal_weight,
-                    decay_lane=entry.decay_lane,
-                    description=entry.description,
-                )
+                .values(**values)
             )
             if result.rowcount == 0:
                 await session.execute(
                     insert(SourceRegistryRecord).values(
                         source_type=entry.source_type,
-                        trust=entry.trust,
-                        legal_weight=entry.legal_weight,
-                        decay_lane=entry.decay_lane,
-                        description=entry.description,
+                        **values
                     )
                 )
             await session.commit()
@@ -189,6 +248,13 @@ class SourceRegistry:
                         legal_weight=r.legal_weight,
                         decay_lane=r.decay_lane,
                         description=r.description,
+                        authority=r.authority or 0.50,
+                        verifiability=r.verifiability or 0.50,
+                        originality=r.originality or 0.50,
+                        independence=r.independence or 0.50,
+                        legal_status_label=r.legal_status_label or "unverified",
+                        legal_status_weight=r.legal_status_weight or 0.50,
+                        default_claim_status=r.default_claim_status or "needs_verification",
                     )
                     for r in records
                 }
@@ -218,7 +284,8 @@ def _load_yaml_registry() -> Dict[str, SourceTrustEntry]:
                 verifiability=float(cfg.get("verifiability", 0.50)),
                 originality=float(cfg.get("originality", 0.50)),
                 independence=float(cfg.get("independence", 0.50)),
-                legal_status=str(cfg.get("legal_status", "unverified")),
+                legal_status_label=str(cfg.get("legal_status_label", cfg.get("legal_status", "unverified"))),
+                legal_status_weight=float(cfg.get("legal_status_weight", 0.50)),
                 default_claim_status=str(cfg.get("default_claim_status", "needs_verification")),
             )
         return entries

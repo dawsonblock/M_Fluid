@@ -3,8 +3,14 @@ Test MCP mutation guard.
 Tests that mutation tools and CYPHER mode are disabled by default.
 """
 
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports before other imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import os
-import pytest
+import importlib
 
 
 def test_mutation_guard_default_disabled():
@@ -13,8 +19,7 @@ def test_mutation_guard_default_disabled():
     if "MFLOW_MCP_ALLOW_MUTATION" in os.environ:
         del os.environ["MFLOW_MCP_ALLOW_MUTATION"]
 
-    from m_flow_mcp.src.server import _MUTATION_ALLOWED
-
+    from src.server import _MUTATION_ALLOWED
     assert _MUTATION_ALLOWED is False
 
 
@@ -22,8 +27,7 @@ def test_mutation_guard_enabled_with_env():
     """Test MFLOW_MCP_ALLOW_MUTATION=true enables mutation."""
     os.environ["MFLOW_MCP_ALLOW_MUTATION"] = "true"
     # Need to reload the module to pick up new env var
-    import importlib
-    import m_flow_mcp.src.server as server_module
+    import src.server as server_module
     importlib.reload(server_module)
 
     assert server_module._MUTATION_ALLOWED is True
@@ -39,8 +43,7 @@ def test_cypher_guard_default_disabled():
     if "MFLOW_MCP_ALLOW_CYPHER" in os.environ:
         del os.environ["MFLOW_MCP_ALLOW_CYPHER"]
 
-    from m_flow_mcp.src.server import _CYPHER_ALLOWED
-
+    from src.server import _CYPHER_ALLOWED
     assert _CYPHER_ALLOWED is False
 
 
@@ -48,8 +51,7 @@ def test_cypher_guard_enabled_with_env():
     """Test MFLOW_MCP_ALLOW_CYPHER=true enables Cypher."""
     os.environ["MFLOW_MCP_ALLOW_CYPHER"] = "true"
     # Need to reload the module to pick up new env var
-    import importlib
-    import m_flow_mcp.src.server as server_module
+    import src.server as server_module
     importlib.reload(server_module)
 
     assert server_module._CYPHER_ALLOWED is True
@@ -61,11 +63,11 @@ def test_cypher_guard_enabled_with_env():
 
 def test_check_mutation_allowed_blocks():
     """Test _check_mutation_allowed returns error when disabled."""
-    from m_flow_mcp.src.server import _check_mutation_allowed
+    from src.server import _check_mutation_allowed
 
     # Ensure disabled
     if "MFLOW_MCP_ALLOW_MUTATION" in os.environ:
-        del os.environ["MFLOW_ALLOW_MUTATION"]
+        del os.environ["MFLOW_MCP_ALLOW_MUTATION"]
 
     result = _check_mutation_allowed("test_tool")
     assert result is not None
@@ -75,7 +77,7 @@ def test_check_mutation_allowed_blocks():
 
 def test_check_cypher_allowed_blocks():
     """Test _check_cypher_allowed returns error when disabled."""
-    from m_flow_mcp.src.server import _check_cypher_allowed
+    from src.server import _check_cypher_allowed
 
     # Ensure disabled
     if "MFLOW_MCP_ALLOW_CYPHER" in os.environ:

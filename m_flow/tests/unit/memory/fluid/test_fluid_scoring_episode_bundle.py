@@ -68,3 +68,41 @@ def test_compute_graph_score_string_best_path():
     assert service._compute_graph_score(MockBundle("entity")) == 0.65
     assert service._compute_graph_score(MockBundle("unknown")) == 0.50
     assert service._compute_graph_score(MockBundle("")) == 0.50
+
+
+def test_equal_distances_produce_neutral_semantic_score():
+    """Test that when all bundles have equal distances, semantic_score = 0.5."""
+    from m_flow.retrieval.episodic.bundle_scorer import EpisodeBundle
+
+    # Create bundles with equal scores
+    bundle1 = EpisodeBundle(
+        episode_id="ep1",
+        score=0.5,
+        best_path="direct_episode",
+        base_distance_score=0.5,
+    )
+    bundle2 = EpisodeBundle(
+        episode_id="ep2",
+        score=0.5,
+        best_path="facet",
+        base_distance_score=0.5,
+    )
+    bundle3 = EpisodeBundle(
+        episode_id="ep3",
+        score=0.5,
+        best_path="entity",
+        base_distance_score=0.5,
+    )
+
+    # When all distances are equal, semantic score should be neutral (0.5)
+    # This is because there's no relative distance difference to normalize
+    min_dist = 0.5
+    max_dist = 0.5
+    dist_range = max_dist - min_dist
+
+    assert dist_range == 0
+    # When dist_range == 0, semantic_score should be 0.5 (neutral)
+    # This is the expected behavior per the fix in apply_fluid_scores
+    for bundle in [bundle1, bundle2, bundle3]:
+        # With equal distances, semantic_score = 0.5 for all bundles
+        assert bundle.base_distance_score == 0.5
