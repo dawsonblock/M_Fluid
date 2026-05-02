@@ -154,6 +154,8 @@ class JudgeMemoryStorage:
                 return record
         except sqlite3.Error as e:
             logger.error(f"Failed to store evidence: {e}")
+            raise StorageError(f"Failed to store evidence: {e}") from e
+            logger.error(f"Failed to store evidence: {e}")
             raise StorageError(f"Failed to store evidence: {e}")
     
     def get_evidence(self, evidence_id: str) -> Optional[EvidenceRecord]:
