@@ -1,0 +1,336 @@
+# Instincts generated from https://github.com/dawsonblock/M_Fluid
+# Generated: 2026-05-02T07:14:26.326Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: M_Fluid-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/M_Fluid
+---
+
+# M_Fluid Commit Length
+
+## Action
+
+Write moderate-length commit messages (~59 characters)
+
+## Evidence
+
+- Average commit message length: 59 chars
+- Based on 2 commits
+
+---
+id: M_Fluid-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/M_Fluid
+---
+
+# M_Fluid Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: M_Fluid-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/M_Fluid
+---
+
+# M_Fluid Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: M_Fluid-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/M_Fluid
+---
+
+# M_Fluid Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: M_Fluid-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/M_Fluid
+---
+
+# M_Fluid Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: M_Fluid-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/M_Fluid
+---
+
+# M_Fluid Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: m_fluid-instinct-file-naming
+trigger: "When creating a new file in the repository"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct File Naming
+
+## Action
+
+Name the file using snake_case convention
+
+## Evidence
+
+- Pattern in files: judge_memory, m_flow
+
+---
+id: m_fluid-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Function Naming
+
+## Action
+
+Use camelCase for the function name
+
+## Evidence
+
+- Naming convention: functions: camelCase
+
+---
+id: m_fluid-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Class Naming
+
+## Action
+
+Use PascalCase for the class name
+
+## Evidence
+
+- Naming convention: classes: PascalCase
+
+---
+id: m_fluid-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for the constant name
+
+## Evidence
+
+- Naming convention: constants: SCREAMING_SNAKE_CASE
+
+---
+id: m_fluid-instinct-import-style
+trigger: "When importing modules within the codebase"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Import Style
+
+## Action
+
+Use relative import statements
+
+## Evidence
+
+- importStyle: relative
+
+---
+id: m_fluid-instinct-export-style
+trigger: "When exporting functions or classes"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- exportStyle: named
+
+---
+id: m_fluid-instinct-test-location
+trigger: "When adding or updating tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Test Location
+
+## Action
+
+Place test files in the separate 'tests' folder
+
+## Evidence
+
+- testLocation: separate
+- commonFolders: tests
+
+---
+id: m_fluid-instinct-test-pattern
+trigger: "When naming a test file"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Test Pattern
+
+## Action
+
+Use the '*.test.ts' file pattern
+
+## Evidence
+
+- filePattern: *.test.ts
+
+---
+id: m_fluid-instinct-test-type
+trigger: "When writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Test Type
+
+## Action
+
+Write unit tests
+
+## Evidence
+
+- testTypes: unit
+
+---
+id: m_fluid-instinct-commit-prefix
+trigger: "When writing a commit message for a new feature"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Commit Prefix
+
+## Action
+
+Prefix the commit message with 'feat'
+
+## Evidence
+
+- commit example: feat(judge_memory): production-ready memory module with critical bug fixes
+
+---
+id: m_fluid-instinct-commit-length
+trigger: "When composing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: dawsonblock/M_Fluid
+---
+
+# M_fluid Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 59 characters on average
+
+## Evidence
+
+- averageLength: 59
+
