@@ -7,14 +7,6 @@ The implementation has been moved to judge_memory/ for clean isolation.
 New import path (recommended):
     from judge_memory import JudgeMemoryService, JudgeMemoryConfig
 
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/m_flow/judge_memory/__init__.py
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/m_flow/judge_memory/__init__.py
-Legacy import path (still works):
-    from m_flow.judge_memory import JudgeMemoryService, JudgeMemoryConfig
-"""
-=======
-=======
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/m_flow/judge_memory/__init__.py
 Legacy import path (deprecated):
     from m_flow.judge_memory import JudgeMemoryService, JudgeMemoryConfig
 """
@@ -29,10 +21,6 @@ warnings.warn(
     DeprecationWarning,
     stacklevel=2,
 )
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/m_flow/judge_memory/__init__.py
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/m_flow/judge_memory/__init__.py
-=======
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/m_flow/judge_memory/__init__.py
 
 # Re-export from top-level package
 from judge_memory import (
