@@ -17,6 +17,7 @@ class EvidenceRecord(BaseModel):
     source_type: str = Field(description="Type: court_record, government_data, etc.")
     source_url: Optional[str] = Field(default=None, description="Source URL if available")
     source_title: Optional[str] = Field(default=None, description="Human-readable title")
+    content_preview: Optional[str] = Field(default=None, description="First 1000 chars of content for search")
     jurisdiction: Optional[str] = Field(default=None, description="Jurisdiction code")
     published_at: Optional[datetime] = Field(default=None, description="Publication date")
     file_path: Optional[str] = Field(default=None, description="Path to stored file")

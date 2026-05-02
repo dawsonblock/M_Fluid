@@ -62,25 +62,47 @@ class JudgeMemorySearch:
         )
         
         for evidence in evidence_results:
+            # Use content_preview if available, otherwise fall back to title
+            preview_text = evidence.content_preview or evidence.source_title or ""
             results.append(
                 JudgeMemorySearchResult(
                     result_type="evidence",
                     record_id=evidence.evidence_id,
-                    title=evidence.source_title,
-                    content_preview=self._preview(
-                        evidence.source_title or "", 200
-                    ),
+                    title=evidence.source_title or "Untitled Evidence",
+                    content_preview=self._preview(preview_text, 200),
                     source_type=evidence.source_type,
                     jurisdiction=evidence.jurisdiction,
                     score=0.5,  # Base score
                 )
             )
         
-        # TODO: Add claim search when storage method available
-        
+        # Search claims
+        claim_results = self.storage.search_claims(
+            query=query if query else None,
+            case_id=case_id,
+            judge_id=judge_id,
+            person_id=person_id,
+            entity_id=entity_id,
+            status=claim_status,
+            limit=limit,
+        )
+
+        for claim in claim_results:
+            results.append(
+                JudgeMemorySearchResult(
+                    result_type="claim",
+                    record_id=claim.claim_id,
+                    title=f"Claim: {claim.claim_text[:50]}...",
+                    content_preview=self._preview(claim.claim_text, 200),
+                    source_type=None,
+                    jurisdiction=jurisdiction,
+                    score=claim.confidence,  # Use claim confidence as score
+                )
+            )
+
         # Sort by score descending
         results.sort(key=lambda x: x.score, reverse=True)
-        
+
         return results[:limit]
     
     def get_timeline(
@@ -93,7 +115,7 @@ class JudgeMemorySearch:
         limit: int = 50,
     ) -> List[JudgeMemorySearchResult]:
         """Get timeline events for entity/case/judge.
-        
+
         Args:
             entity_id: Filter by entity ID
             case_id: Filter by case ID
@@ -101,13 +123,34 @@ class JudgeMemorySearch:
             person_id: Filter by person ID
             jurisdiction: Filter by jurisdiction
             limit: Maximum results
-            
+
         Returns:
             Timeline events as search results
         """
-        # TODO: Implement timeline query in storage
-        logger.warning("Timeline search not yet fully implemented")
-        return []
+        events = self.storage.get_timeline_events(
+            case_id=case_id,
+            judge_id=judge_id,
+            person_id=person_id,
+            entity_id=entity_id,
+            jurisdiction=jurisdiction,
+            limit=limit,
+        )
+
+        results = []
+        for event in events:
+            results.append(
+                JudgeMemorySearchResult(
+                    result_type="timeline",
+                    record_id=event.event_id,
+                    title=f"{event.event_type}: {event.description[:50]}...",
+                    content_preview=self._preview(event.description, 200),
+                    source_type=None,
+                    jurisdiction=event.jurisdiction,
+                    score=0.7,  # Timeline events have higher relevance
+                )
+            )
+
+        return results
     
     def _preview(self, text: str, max_length: int = 200) -> str:
         """Create preview text.

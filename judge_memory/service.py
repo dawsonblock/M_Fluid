@@ -205,15 +205,19 @@ class JudgeMemoryService:
             
         Returns:
             ClaimRecord
+            
+        Raises:
+            EvidenceNotFoundError: If evidence_id does not exist
         """
+        # Validate evidence exists - no orphaned claims allowed
+        evidence = self.storage.get_evidence(evidence_id)
+        if not evidence:
+            raise EvidenceNotFoundError(f"Evidence not found: {evidence_id}")
+        
         # Get default confidence from source profile
         if confidence is None:
-            evidence = self.storage.get_evidence(evidence_id)
-            if evidence:
-                profile = self.fluid.get_source_profile(evidence.source_type)
-                confidence = profile["authority"] * 0.8  # Derive from authority
-            else:
-                confidence = 0.5
+            profile = self.fluid.get_source_profile(evidence.source_type)
+            confidence = profile["authority"] * 0.8  # Derive from authority
         
         claim = self.claims_manager.create_claim(
             evidence_id=evidence_id,

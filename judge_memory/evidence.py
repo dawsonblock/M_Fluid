@@ -75,6 +75,9 @@ class EvidenceStorage:
         # Compute hash for deduplication
         content_hash = compute_content_hash(raw_text)
         
+        # Generate content preview for search (first 1000 chars)
+        content_preview = raw_text[:1000] if raw_text else None
+        
         # Generate evidence ID
         evidence_id = f"ev_{uuid.uuid4().hex[:16]}"
         
@@ -100,6 +103,7 @@ class EvidenceStorage:
             source_type=source_type,
             source_url=source_url,
             source_title=source_title,
+            content_preview=content_preview,
             jurisdiction=jurisdiction,
             published_at=published_at,
             file_path=str(file_path),

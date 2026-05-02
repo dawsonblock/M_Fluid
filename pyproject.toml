@@ -254,7 +254,7 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["m_flow", "mflow_workers"]
+packages = ["m_flow", "mflow_workers", "judge_memory"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

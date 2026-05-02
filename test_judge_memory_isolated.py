@@ -61,9 +61,11 @@ async def test_basic_operations():
         print(f"  - Status: {claim.status}")
         print(f"  - Confidence: {claim.confidence}")
         
-        # Test 4: Search
+        # Test 4: Search evidence by content
         results = await service.search("guilty")
         print(f"✓ Search returned {len(results)} results")
+        assert len(results) > 0, "Search should find evidence by content"
+        print(f"  - Found: {results[0].result_type} '{results[0].title}'")
         
         # Test 5: Review claim
         reviewed = await service.review_claim(
@@ -100,25 +102,97 @@ def test_import_isolation():
     return not has_structlog
 
 
+async def test_orphaned_claims_blocked():
+    """Test that claims cannot be created without evidence."""
+    import tempfile
+    from judge_memory import JudgeMemoryService, JudgeMemoryConfig
+    from judge_memory.exceptions import EvidenceNotFoundError
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config = JudgeMemoryConfig(data_dir=tmpdir)
+        service = JudgeMemoryService(config)
+
+        try:
+            # Attempt to create claim with fake evidence_id
+            await service.add_claim(
+                evidence_id="nonexistent_evidence",
+                claim_text="This should fail",
+            )
+            print("✗ Orphaned claim test FAILED - claim created without evidence")
+            return False
+        except EvidenceNotFoundError:
+            print("✓ Orphaned claims correctly blocked")
+            return True
+        finally:
+            await service.close()
+
+
+async def test_claim_search():
+    """Test searching claims by text."""
+    import tempfile
+    from judge_memory import JudgeMemoryService, JudgeMemoryConfig
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config = JudgeMemoryConfig(data_dir=tmpdir)
+        service = JudgeMemoryService(config)
+
+        # Create evidence and claim
+        evidence = await service.ingest_evidence(
+            raw_text="Court proceedings transcript",
+            source_type="court_record",
+        )
+        claim = await service.add_claim(
+            evidence_id=evidence.evidence_id,
+            claim_text="The defendant breached contract obligations",
+            case_id="case_001",
+        )
+
+        # Search for claim
+        results = await service.search("breached contract")
+        claim_results = [r for r in results if r.result_type == "claim"]
+
+        if len(claim_results) > 0:
+            print(f"✓ Claim search works - found {len(claim_results)} claim(s)")
+            success = True
+        else:
+            print("✗ Claim search failed - no claims found")
+            success = False
+
+        await service.close()
+        return success
+
+
 async def main():
     """Run all tests."""
     print("=" * 60)
-    print("Judge Memory Isolation Test")
+    print("Judge Memory Production-Ready Test")
     print("=" * 60)
-    
-    # Test operations
+
+    # Test basic operations
     ops_ok = await test_basic_operations()
-    
+
+    # Test orphaned claims blocked
+    orphan_ok = await test_orphaned_claims_blocked()
+
+    # Test claim search
+    claim_search_ok = await test_claim_search()
+
     # Test isolation
     iso_ok = test_import_isolation()
-    
+
     print("\n" + "=" * 60)
-    if ops_ok and iso_ok:
+    all_passed = ops_ok and orphan_ok and claim_search_ok and iso_ok
+    if all_passed:
         print("✓ ALL TESTS PASSED")
-        print("Judge Memory works standalone without m_flow!")
+        print("Judge Memory is production-ready!")
     else:
-        print("✗ TESTS FAILED")
+        print("✗ SOME TESTS FAILED")
+        print(f"  - Basic operations: {'✓' if ops_ok else '✗'}")
+        print(f"  - Orphan claims blocked: {'✓' if orphan_ok else '✗'}")
+        print(f"  - Claim search: {'✓' if claim_search_ok else '✗'}")
+        print(f"  - Import isolation: {'✓' if iso_ok else '✗'}")
     print("=" * 60)
+    return all_passed
 
 
 if __name__ == "__main__":

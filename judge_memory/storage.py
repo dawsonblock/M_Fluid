@@ -39,6 +39,7 @@ class JudgeMemoryStorage:
                     source_type TEXT NOT NULL,
                     source_url TEXT,
                     source_title TEXT,
+                    content_preview TEXT,
                     jurisdiction TEXT,
                     published_at TEXT,
                     file_path TEXT,
@@ -131,9 +132,9 @@ class JudgeMemoryStorage:
                     """
                     INSERT OR REPLACE INTO evidence_records (
                         evidence_id, content_hash, source_type, source_url,
-                        source_title, jurisdiction, published_at, file_path,
+                        source_title, content_preview, jurisdiction, published_at, file_path,
                         metadata, ingested_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         record.evidence_id,
@@ -141,6 +142,7 @@ class JudgeMemoryStorage:
                         record.source_type,
                         record.source_url,
                         record.source_title,
+                        record.content_preview,
                         record.jurisdiction,
                         record.published_at.isoformat() if record.published_at else None,
                         record.file_path,
@@ -201,8 +203,8 @@ class JudgeMemoryStorage:
             params = []
             
             if query:
-                sql += " AND (source_title LIKE ? OR source_url LIKE ?)"
-                params.extend([f"%{query}%", f"%{query}%"])
+                sql += " AND (source_title LIKE ? OR source_url LIKE ? OR content_preview LIKE ?)"
+                params.extend([f"%{query}%", f"%{query}%", f"%{query}%"])
             
             if source_type:
                 sql += " AND source_type = ?"
@@ -282,11 +284,12 @@ class JudgeMemoryStorage:
             source_type=row[2],
             source_url=row[3],
             source_title=row[4],
-            jurisdiction=row[5],
-            published_at=datetime.fromisoformat(row[6]) if row[6] else None,
-            file_path=row[7],
-            metadata=json.loads(row[8]) if row[8] else {},
-            ingested_at=datetime.fromisoformat(row[9]),
+            content_preview=row[5],
+            jurisdiction=row[6],
+            published_at=datetime.fromisoformat(row[7]) if row[7] else None,
+            file_path=row[8],
+            metadata=json.loads(row[9]) if row[9] else {},
+            ingested_at=datetime.fromisoformat(row[10]),
         )
     
     def _row_to_claim(self, row: tuple) -> ClaimRecord:
@@ -306,4 +309,117 @@ class JudgeMemoryStorage:
             metadata=json.loads(row[11]) if row[11] else {},
             created_at=datetime.fromisoformat(row[12]),
             updated_at=datetime.fromisoformat(row[13]),
+        )
+
+    def search_claims(
+        self,
+        query: Optional[str] = None,
+        case_id: Optional[str] = None,
+        judge_id: Optional[str] = None,
+        person_id: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[ClaimRecord]:
+        """Search claim records."""
+        try:
+            sql = "SELECT * FROM claim_records WHERE 1=1"
+            params = []
+
+            if query:
+                sql += " AND claim_text LIKE ?"
+                params.append(f"%{query}%")
+
+            if case_id:
+                sql += " AND case_id = ?"
+                params.append(case_id)
+
+            if judge_id:
+                sql += " AND judge_id = ?"
+                params.append(judge_id)
+
+            if person_id:
+                sql += " AND person_id = ?"
+                params.append(person_id)
+
+            if entity_id:
+                sql += " AND entity_id = ?"
+                params.append(entity_id)
+
+            if status:
+                sql += " AND status = ?"
+                params.append(status)
+
+            sql += f" ORDER BY created_at DESC LIMIT {limit}"
+
+            with sqlite3.connect(self.db_path) as conn:
+                rows = conn.execute(sql, params).fetchall()
+                return [self._row_to_claim(row) for row in rows]
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to search claims: {e}")
+            raise StorageError(f"Failed to search claims: {e}")
+
+    def get_timeline_events(
+        self,
+        case_id: Optional[str] = None,
+        judge_id: Optional[str] = None,
+        person_id: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        jurisdiction: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[TimelineEvent]:
+        """Get timeline events for entity/case/judge.
+
+        Returns chronological events filtered by provided criteria.
+        """
+        try:
+            sql = "SELECT * FROM timeline_events WHERE 1=1"
+            params = []
+
+            if case_id:
+                sql += " AND case_id = ?"
+                params.append(case_id)
+
+            if judge_id:
+                sql += " AND judge_id = ?"
+                params.append(judge_id)
+
+            if person_id:
+                sql += " AND person_id = ?"
+                params.append(person_id)
+
+            if entity_id:
+                sql += " AND entity_id = ?"
+                params.append(entity_id)
+
+            if jurisdiction:
+                sql += " AND jurisdiction = ?"
+                params.append(jurisdiction)
+
+            sql += f" ORDER BY event_date ASC LIMIT {limit}"
+
+            with sqlite3.connect(self.db_path) as conn:
+                rows = conn.execute(sql, params).fetchall()
+                return [self._row_to_timeline_event(row) for row in rows]
+
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get timeline events: {e}")
+            raise StorageError(f"Failed to get timeline events: {e}")
+
+    def _row_to_timeline_event(self, row: tuple) -> TimelineEvent:
+        """Convert database row to TimelineEvent."""
+        return TimelineEvent(
+            event_id=row[0],
+            event_type=row[1],
+            event_date=datetime.fromisoformat(row[2]),
+            description=row[3],
+            evidence_id=row[4],
+            claim_id=row[5],
+            case_id=row[6],
+            judge_id=row[7],
+            person_id=row[8],
+            entity_id=row[9],
+            jurisdiction=row[10],
+            metadata=json.loads(row[11]) if row[11] else {},
         )
