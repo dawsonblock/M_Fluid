@@ -207,14 +207,17 @@ class FluidMemoryAdapter:
         # Actually call fluid memory engine when available
         if self._engine:
             try:
+                from m_flow.memory.fluid.models import FluidUpdateEvent
+
                 # Create or touch fluid memory for this evidence
-                self._engine.touch(
+                event = FluidUpdateEvent(
                     memory_id=evidence_id,
                     content=f"Evidence: {evidence_id}",
                     lane=lane,
                     jurisdiction=jurisdiction,
                     source_type=source_type,
                 )
+                await self._engine.touch(event)
                 logger.debug(f"Fluid state touched for {evidence_id}")
             except Exception as e:
                 # Log but don't fail - fluid state is optional enhancement
