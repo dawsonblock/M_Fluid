@@ -19,7 +19,7 @@ Judge Memory is a bounded, importable memory module designed for legal and evide
 ## Installation
 
 Requires only:
-- Python 3.8+
+- Python 3.8+ (tested on 3.8, 3.9, 3.10, 3.11, 3.12)
 - Pydantic
 
 No structlog, no graph database, no vector database required.
@@ -27,6 +27,12 @@ No structlog, no graph database, no vector database required.
 ```bash
 pip install pydantic
 ```
+
+### Python 3.11+ Ready
+
+The `judge_memory` package uses traditional `Optional[Type]` syntax for maximum
+compatibility across Python versions. This ensures it works on Python 3.8+
+including 3.11 and 3.12 without requiring any code changes.
 
 ## Quick Start
 
