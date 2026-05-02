@@ -58,7 +58,7 @@ Each memory tracks fluid state properties:
 ```python
 memory_id: str              # UUID4 identifier
 content: str                # Text content
-content_hash: str           # SHA256 for deduplication
+content_hash: str           # MD5 of content for deduplication; persisted hashes are MD5-based, so changing algorithms later requires recomputing/migrating existing values for compatibility
 
 salience: float             # [0.0-1.0] Current importance
 confidence: float           # [0.0-1.0] Current reliability
