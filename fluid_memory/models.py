@@ -50,8 +50,8 @@ class MemoryItem(BaseModel):
     attention_salience: float = Field(default=0.5)
 
     # Event tracking
-    reinforcement_count: int = Field(default=0)
-    contradiction_count: int = Field(default=0)
+    reinforcement_count: int = Field(default=0, ge=0)
+    contradiction_count: int = Field(default=0, ge=0)
 
     # References
     source_refs: List[str] = Field(default_factory=list)
