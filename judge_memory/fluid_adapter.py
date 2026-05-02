@@ -216,7 +216,8 @@ class FluidMemoryAdapter:
         Returns:
             Source profile dict with authority, verifiability, etc.
         """
-        # Use hardcoded profiles (no dependency on m_flow)
-        return HARDCODED_SOURCE_PROFILES.get(
-            source_type, HARDCODED_SOURCE_PROFILES["unknown"]
+        # Prefer m_flow source profiles when available; otherwise this
+        # resolves to HARDCODED_SOURCE_PROFILES from the fallback assignment.
+        return FLUID_SOURCE_PROFILES.get(
+            source_type, FLUID_SOURCE_PROFILES["unknown"]
         )
