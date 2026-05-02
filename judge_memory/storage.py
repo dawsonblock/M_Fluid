@@ -155,8 +155,6 @@ class JudgeMemoryStorage:
         except sqlite3.Error as e:
             logger.error(f"Failed to store evidence: {e}")
             raise StorageError(f"Failed to store evidence: {e}") from e
-            logger.error(f"Failed to store evidence: {e}")
-            raise StorageError(f"Failed to store evidence: {e}")
     
     def get_evidence(self, evidence_id: str) -> Optional[EvidenceRecord]:
         """Retrieve evidence by ID."""
@@ -260,8 +258,6 @@ class JudgeMemoryStorage:
         except sqlite3.Error as e:
             logger.error(f"Failed to store claim: {e}")
             raise StorageError(f"Failed to store claim: {e}") from e
-            logger.error(f"Failed to store claim: {e}")
-            raise StorageError(f"Failed to store claim: {e}")
     
     def get_claim(self, claim_id: str) -> Optional[ClaimRecord]:
         """Retrieve claim by ID."""
