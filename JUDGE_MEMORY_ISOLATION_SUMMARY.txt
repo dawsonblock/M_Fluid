@@ -1,55 +1,18 @@
 ================================================================================
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-JUDGE MEMORY ISOLATION - PRODUCTION READY
-================================================================================
-
-PHASE 1 COMPLETED (Critical Production Blockers):
-=======
 JUDGE MEMORY ISOLATION - LOCAL PROTOTYPE
 ================================================================================
 
 PHASE 1 COMPLETED (Critical Blockers Fixed):
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-=======
-JUDGE MEMORY ISOLATION - LOCAL PROTOTYPE
-================================================================================
-
-PHASE 1 COMPLETED (Critical Blockers Fixed):
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-=======
-JUDGE MEMORY ISOLATION - LOCAL PROTOTYPE
-================================================================================
-
-PHASE 1 COMPLETED (Critical Blockers Fixed):
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
   ✅ Fixed pyproject.toml packaging (judge_memory now in wheel packages)
   ✅ Fixed orphaned claims bug (add_claim validates evidence_id exists)
   ✅ Enhanced search (searches evidence body via content_preview)
   ✅ Implemented claim search (search_claims in storage + search.py)
   ✅ Implemented timeline query (get_timeline_events in storage)
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
 
 PHASE 2 COMPLETED (Architecture Cleanup):
   ✅ Deprecated m_flow.judge_memory import (DeprecationWarning added)
   ✅ Strengthened tests (orphaned claims, claim search, evidence search)
 
-=======
-
-PHASE 2 COMPLETED (Architecture Cleanup):
-  ✅ Deprecated m_flow.judge_memory import (DeprecationWarning added)
-  ✅ Strengthened tests (orphaned claims, claim search, evidence search)
-
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-=======
-
-PHASE 2 COMPLETED (Architecture Cleanup):
-  ✅ Deprecated m_flow.judge_memory import (DeprecationWarning added)
-  ✅ Strengthened tests (orphaned claims, claim search, evidence search)
-
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
 ORIGINAL ISOLATION WORK:
   Created top-level judge_memory/ package with:
   - Minimal dependencies (only Pydantic + stdlib)
@@ -83,40 +46,14 @@ VERIFICATION:
     - Orphaned claims blocked
     - Claim search works
     - Import isolation (no structlog required)
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
 
 PYTHON VERSION COMPATIBILITY:
   - judge_memory: Python 3.8+ (uses Optional[] syntax)
   - m_flow.judge_memory: Deprecated, Python 3.10+ only
-
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-REMOVED:
-  ✅ fluid_memory/ directory (redundant with bugs, m_flow/memory/fluid/ is canonical)
-=======
-
-PYTHON VERSION COMPATIBILITY:
-  - judge_memory: Python 3.8+ (uses Optional[] syntax)
-  - m_flow.judge_memory: Deprecated, Python 3.10+ only
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
 
 NOTE:
   See docs/MEMORY_SYSTEM_STATUS.md for current system architecture.
 
 ================================================================================
 STATUS: LOCAL PROTOTYPE - TESTABLE BUT NOT PRODUCTION-GRADE
-================================================================================
-STATUS: PRODUCTION READY - ALL CRITICAL BLOCKERS RESOLVED
-=======
-=======
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-NOTE:
-  See docs/MEMORY_SYSTEM_STATUS.md for current system architecture.
-
-================================================================================
-STATUS: LOCAL PROTOTYPE - TESTABLE BUT NOT PRODUCTION-GRADE
-<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
-=======
->>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/JUDGE_MEMORY_ISOLATION_SUMMARY.txt
 ================================================================================

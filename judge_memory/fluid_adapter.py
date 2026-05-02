@@ -204,8 +204,24 @@ class FluidMemoryAdapter:
         lane = self._get_decay_lane(source_type)
         logger.debug(f"Touching evidence {evidence_id} in lane {lane}")
 
-        # TODO: Implement actual fluid state touch when engine available
-        # This would call self._engine.touch() with appropriate parameters
+        # Actually call fluid memory engine when available
+        if self._engine:
+            try:
+                from m_flow.memory.fluid.models import FluidUpdateEvent
+
+                # Create or touch fluid memory for this evidence
+                event = FluidUpdateEvent(
+                    memory_id=evidence_id,
+                    content=f"Evidence: {evidence_id}",
+                    lane=lane,
+                    jurisdiction=jurisdiction,
+                    source_type=source_type,
+                )
+                await self._engine.touch(event)
+                logger.debug(f"Fluid state touched for {evidence_id}")
+            except Exception as e:
+                # Log but don't fail - fluid state is optional enhancement
+                logger.warning(f"Failed to touch fluid state: {e}")
 
     def get_source_profile(self, source_type: str) -> Dict[str, Any]:
         """Get source profile for trust calculations.
