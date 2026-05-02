@@ -123,8 +123,8 @@ engine.contradict(memory_id, amount=0.2)
 
 ### Apply Decay
 ```python
-count = engine.apply_decay(days=1.0)
-# Applies decay to all memories
+count = engine.apply_decay()
+# Applies decay to memories and returns the number decayed
 ```
 
 ## Configuration
