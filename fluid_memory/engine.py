@@ -11,11 +11,11 @@ from typing import Optional, List, Dict, Any
 from fluid_memory.config import FluidMemoryConfig
 from fluid_memory.models import MemoryItem, MemoryLink, RetrievalResult
 from fluid_memory.storage import MemoryStorage
-from fluid_memory.decay import DecayManager, apply_decay_to_memory
+from fluid_memory.decay import DecayManager
 from fluid_memory.events import MemoryEvent, EventType
 from fluid_memory.mutation import mutate_memory
 from fluid_memory.scoring import compute_retrieval_score
-from fluid_memory.exceptions import MemoryNotFoundError, DuplicateMemoryError, StorageError
+from fluid_memory.exceptions import MemoryNotFoundError, DuplicateMemoryError
 
 
 def _sha256(content: str) -> str:
