@@ -158,4 +158,4 @@ Memories are deduplicated by SHA256 content hash. Adding identical content does 
 
 Local prototype - testable but not production-grade.
 
-See `docs/MEMORY_SYSTEM_STATUS.md` for full system architecture.
+See the project documentation for full system architecture.
