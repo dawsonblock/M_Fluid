@@ -180,10 +180,10 @@ python3 test_judge_memory_isolated.py
 | File | Status | Notes |
 |------|--------|-------|
 | `docs/MEMORY_SYSTEM_STATUS.md` | ✅ Current | This file - single source of truth |
-| `JUDGE_MEMORY_ISOLATION_SUMMARY.txt` | ⚠️ Needs update | Remove "production ready" claims |
-| `JUDGE_MEMORY_INTEGRATION.md` | ⚠️ Needs update | Change to `judge_memory` import path |
-| `judge_memory/README.md` | ⚠️ Needs update | Document fluid as "calls when available" |
-| `docs/FLUID_MEMORY_CORE.md` | ⚠️ Needs update | Mark as draft or update to actual location |
+| `JUDGE_MEMORY_ISOLATION_SUMMARY.txt` | ✅ Current | Removed "production ready" claims |
+| `JUDGE_MEMORY_INTEGRATION.md` | ✅ Current | Updated to `judge_memory` import path |
+| `judge_memory/README.md` | ✅ Current | Documented fluid as "calls when available" |
+| `docs/FLUID_MEMORY_CORE.md` | ✅ Current | Updated status and architecture notes |
 
 ---
 
