@@ -96,8 +96,10 @@ memory = engine.add_memory(
     content="Important fact",
     tags=["category"],
     source_refs=["source_id"],
-    salience=0.8,
-    confidence=0.9
+    metadata={
+        "salience": 0.8,
+        "confidence": 0.9,
+    },
 )
 ```
 
