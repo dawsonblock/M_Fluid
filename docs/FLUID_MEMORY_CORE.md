@@ -1,5 +1,11 @@
 # Fluid Memory Core
 
+> **Status Note:** There are two fluid memory implementations:
+> 1. `fluid_memory/` - Standalone package (this document)
+> 2. `m_flow/memory/fluid/` - Advanced integrated engine (part of M-flow)
+> 
+> See `docs/MEMORY_SYSTEM_STATUS.md` for full architecture overview.
+
 A standalone adaptive memory state engine. Memories are not static — they shift over time when touched by new input, reuse, contradictions, confirmations, age, and importance.
 
 ## Overview

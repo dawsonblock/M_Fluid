@@ -102,17 +102,19 @@ Hardcoded profiles for common source types:
 | mainstream_news | 0.60 | press_report |
 | blog_social | 0.30 | unverified_source |
 
-### Optional Fluid Memory
+### Optional Fluid Memory Integration
 
-When M-flow is available and `enable_fluid_memory=True`:
+When M-flow is installed and `enable_fluid_memory=True`:
+- Calls `m_flow.memory.fluid` engine for state tracking
 - Lane-specific decay (legal, trust, interest, attention)
 - Contradiction pressure tracking
 - Activation propagation
 
 When M-flow is unavailable:
-- Graceful degradation to local profiles
-- No external dependencies
-- Full functionality preserved
+- Uses hardcoded source profiles (no external dependencies)
+- Fluid state tracking disabled
+- Core evidence/claims functionality preserved
+- No error - graceful degradation
 
 ## Database Schema
 

@@ -1,5 +1,9 @@
 # Judge Memory Integration Summary
 
+> **⚠️ DEPRECATED PATH:** The `m_flow.judge_memory` import path is deprecated.
+> Use `from judge_memory import ...` (top-level package) instead.
+> See `docs/MEMORY_SYSTEM_STATUS.md` for current architecture.
+
 ## What Was Delivered
 
 A clean, bounded integration layer for the Judge app:
@@ -7,7 +11,7 @@ A clean, bounded integration layer for the Judge app:
 ```
 Judge app
   ↓
-JudgeMemoryService
+judge_memory (top-level package)
   ↓
 ├── Evidence Store (immutable files)
 ├── Claim Store (SQLite)
@@ -20,17 +24,18 @@ JudgeMemoryService
 ### Judge Memory Package
 | File | Purpose |
 |------|---------|
-| `m_flow/judge_memory/__init__.py` | Public API exports |
-| `m_flow/judge_memory/config.py` | JudgeMemoryConfig with safe defaults |
-| `m_flow/judge_memory/models.py` | EvidenceRecord, ClaimRecord, JudgeMemorySearchResult, TimelineEvent, SourcePacket |
-| `m_flow/judge_memory/service.py` | JudgeMemoryService - main API |
-| `m_flow/judge_memory/storage.py` | SQLite storage for evidence, claims, timeline |
-| `m_flow/judge_memory/evidence.py` | Immutable evidence file storage with SHA256 hashing |
-| `m_flow/judge_memory/claims.py` | ClaimsManager - claims linked to evidence |
-| `m_flow/judge_memory/search.py` | Keyword search with fallback |
-| `m_flow/judge_memory/fluid_adapter.py` | Thin adapter for fluid memory (optional) |
-| `m_flow/judge_memory/exceptions.py` | Custom exceptions |
-| `m_flow/judge_memory/README.md` | Integration guide |
+| `judge_memory/__init__.py` | Public API exports (canonical) |
+| `m_flow/judge_memory/__init__.py` | Compatibility shim (deprecated) |
+| `judge_memory/config.py` | JudgeMemoryConfig with safe defaults |
+| `judge_memory/models.py` | EvidenceRecord, ClaimRecord, JudgeMemorySearchResult, TimelineEvent, SourcePacket |
+| `judge_memory/service.py` | JudgeMemoryService - main API |
+| `judge_memory/storage.py` | SQLite storage for evidence, claims, timeline |
+| `judge_memory/evidence.py` | Immutable evidence file storage with SHA256 hashing |
+| `judge_memory/claims.py` | ClaimsManager - claims linked to evidence |
+| `judge_memory/search.py` | Keyword search with fallback |
+| `judge_memory/fluid_adapter.py` | Thin adapter for fluid memory (optional) |
+| `judge_memory/exceptions.py` | Custom exceptions |
+| `judge_memory/README.md` | Integration guide |
 
 ### Tests Created
 | File | Purpose |
@@ -47,10 +52,10 @@ JudgeMemoryService
 | `m_flow/memory/fluid/source_registry.py` | DB loading uses `if x is not None else default` (not `or`) |
 | `m_flow/memory/fluid/graph_access.py` | edge_type validation before Cypher interpolation |
 
-## Public API
+## Public API (Canonical Path)
 
 ```python
-from m_flow.judge_memory import JudgeMemoryService, JudgeMemoryConfig
+from judge_memory import JudgeMemoryService, JudgeMemoryConfig
 
 # Configure
 config = JudgeMemoryConfig(
@@ -112,11 +117,11 @@ health = await service.healthcheck()
 
 ## How to Integrate into Judge ZIP
 
-1. Copy `m_flow/judge_memory/` directory to your Judge app
-2. Import: `from m_flow.judge_memory import JudgeMemoryService, JudgeMemoryConfig`
+1. Copy `judge_memory/` directory to your Judge app (top-level package)
+2. Import: `from judge_memory import JudgeMemoryService, JudgeMemoryConfig`
 3. Configure paths (can be external drive)
 4. Use the API as shown above
-5. Fluid memory can be enabled later without code changes
+5. Fluid memory can be enabled later without code changes (requires m_flow installed)
 
 ## Known Limitations
 
