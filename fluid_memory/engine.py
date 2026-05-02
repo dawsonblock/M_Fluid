@@ -253,6 +253,7 @@ class FluidMemoryEngine:
         for memory in memories:
             memory.touch()
             self.storage.update_memory(memory)
+            self._emit(memory.memory_id, EventType.ACCESSED, {})
             score = compute_retrieval_score(memory, query=query, tags=tags)
             if score >= threshold:
                 results.append(RetrievalResult(
