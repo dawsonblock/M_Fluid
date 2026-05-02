@@ -6,8 +6,8 @@ import tempfile
 import pytest
 from pathlib import Path
 
-from m_flow.memory.fluid.engine import FluidMemoryEngine
-from m_flow.memory.fluid.config import FluidMemoryConfig
+from fluid_memory.engine import FluidMemoryEngine
+from fluid_memory.config import FluidMemoryConfig
 
 
 @pytest.fixture

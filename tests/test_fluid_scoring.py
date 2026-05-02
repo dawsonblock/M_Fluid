@@ -3,14 +3,14 @@ Test Fluid Memory scoring functions.
 """
 
 import pytest
-from m_flow.memory.fluid.scoring import (
+from fluid_memory.scoring import (
     compute_salience,
     compute_confidence,
     compute_volatility,
     compute_stability,
     compute_retrieval_score,
 )
-from m_flow.memory.fluid.models import MemoryItem
+from fluid_memory.models import MemoryItem
 
 
 def test_compute_salience_access_boost():

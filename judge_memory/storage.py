@@ -25,18 +25,12 @@ class JudgeMemoryStorage:
         self.config = config
         self.db_path = config.db_path
         self._init_db()
-
-    def _connect(self) -> sqlite3.Connection:
-        """Create a connection with foreign key enforcement enabled."""
-        conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
-
+    
     def _init_db(self) -> None:
         """Initialize database tables."""
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         
-        with self._connect() as conn:
+        with sqlite3.connect(self.db_path) as conn:
             # Evidence table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS evidence_records (
@@ -131,58 +125,41 @@ class JudgeMemoryStorage:
             logger.info(f"Database initialized: {self.db_path}")
     
     def store_evidence(self, record: EvidenceRecord) -> EvidenceRecord:
-        """Store evidence record.
-
-        Returns the existing record unchanged if the content_hash already
-        exists (evidence is treated as immutable).
-        """
+        """Store evidence record."""
         try:
-            with self._connect() as conn:
-                try:
-                    conn.execute(
-                        """
-                        INSERT INTO evidence_records (
-                            evidence_id, content_hash, source_type, source_url,
-                            source_title, content_preview, jurisdiction, published_at, file_path,
-                            metadata, ingested_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            record.evidence_id,
-                            record.content_hash,
-                            record.source_type,
-                            record.source_url,
-                            record.source_title,
-                            record.content_preview,
-                            record.jurisdiction,
-                            record.published_at.isoformat() if record.published_at else None,
-                            record.file_path,
-                            json.dumps(record.metadata),
-                            record.ingested_at.isoformat(),
-                        ),
-                    )
-                    conn.commit()
-                    return record
-                except sqlite3.IntegrityError:
-                    # content_hash collision — fetch and return the existing immutable record
-                    row = conn.execute(
-                        "SELECT * FROM evidence_records WHERE content_hash = ?",
-                        (record.content_hash,),
-                    ).fetchone()
-                    if row:
-                        return self._row_to_evidence(row)
-                    raise StorageError(
-                        f"content_hash collision for evidence_id={record.evidence_id} "
-                        "but existing record could not be retrieved"
-                    )
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO evidence_records (
+                        evidence_id, content_hash, source_type, source_url,
+                        source_title, content_preview, jurisdiction, published_at, file_path,
+                        metadata, ingested_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record.evidence_id,
+                        record.content_hash,
+                        record.source_type,
+                        record.source_url,
+                        record.source_title,
+                        record.content_preview,
+                        record.jurisdiction,
+                        record.published_at.isoformat() if record.published_at else None,
+                        record.file_path,
+                        json.dumps(record.metadata),
+                        record.ingested_at.isoformat(),
+                    ),
+                )
+                conn.commit()
+                return record
         except sqlite3.Error as e:
             logger.error(f"Failed to store evidence: {e}")
-            raise StorageError(f"Failed to store evidence: {e}") from e
+            raise StorageError(f"Failed to store evidence: {e}")
     
     def get_evidence(self, evidence_id: str) -> Optional[EvidenceRecord]:
         """Retrieve evidence by ID."""
         try:
-            with self._connect() as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 row = conn.execute(
                     "SELECT * FROM evidence_records WHERE evidence_id = ?",
                     (evidence_id,),
@@ -199,7 +176,7 @@ class JudgeMemoryStorage:
     def get_evidence_by_hash(self, content_hash: str) -> Optional[EvidenceRecord]:
         """Retrieve evidence by content hash."""
         try:
-            with self._connect() as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 row = conn.execute(
                     "SELECT * FROM evidence_records WHERE content_hash = ?",
                     (content_hash,),
@@ -223,7 +200,7 @@ class JudgeMemoryStorage:
         """Search evidence records."""
         try:
             sql = "SELECT * FROM evidence_records WHERE 1=1"
-            params: List[Any] = []
+            params = []
             
             if query:
                 sql += " AND (source_title LIKE ? OR source_url LIKE ? OR content_preview LIKE ?)"
@@ -237,10 +214,9 @@ class JudgeMemoryStorage:
                 sql += " AND jurisdiction = ?"
                 params.append(jurisdiction)
             
-            sql += " ORDER BY ingested_at DESC LIMIT ?"
-            params.append(max(1, int(limit)))
+            sql += f" ORDER BY ingested_at DESC LIMIT {limit}"
             
-            with self._connect() as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 rows = conn.execute(sql, params).fetchall()
                 return [self._row_to_evidence(row) for row in rows]
                 
@@ -251,7 +227,7 @@ class JudgeMemoryStorage:
     def store_claim(self, record: ClaimRecord) -> ClaimRecord:
         """Store claim record."""
         try:
-            with self._connect() as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO claim_records (
@@ -281,12 +257,12 @@ class JudgeMemoryStorage:
                 return record
         except sqlite3.Error as e:
             logger.error(f"Failed to store claim: {e}")
-            raise StorageError(f"Failed to store claim: {e}") from e
+            raise StorageError(f"Failed to store claim: {e}")
     
     def get_claim(self, claim_id: str) -> Optional[ClaimRecord]:
         """Retrieve claim by ID."""
         try:
-            with self._connect() as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 row = conn.execute(
                     "SELECT * FROM claim_records WHERE claim_id = ?",
                     (claim_id,),
@@ -348,7 +324,7 @@ class JudgeMemoryStorage:
         """Search claim records."""
         try:
             sql = "SELECT * FROM claim_records WHERE 1=1"
-            params: List[Any] = []
+            params = []
 
             if query:
                 sql += " AND claim_text LIKE ?"
@@ -374,29 +350,15 @@ class JudgeMemoryStorage:
                 sql += " AND status = ?"
                 params.append(status)
 
-            sql += " ORDER BY created_at DESC LIMIT ?"
-            params.append(max(1, int(limit)))
+            sql += f" ORDER BY created_at DESC LIMIT {limit}"
 
-            with self._connect() as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 rows = conn.execute(sql, params).fetchall()
                 return [self._row_to_claim(row) for row in rows]
 
         except sqlite3.Error as e:
             logger.error(f"Failed to search claims: {e}")
             raise StorageError(f"Failed to search claims: {e}")
-
-    def get_claims_for_evidence(self, evidence_id: str) -> List[ClaimRecord]:
-        """Retrieve all claims linked to an evidence record."""
-        try:
-            with self._connect() as conn:
-                rows = conn.execute(
-                    "SELECT * FROM claim_records WHERE evidence_id = ? ORDER BY created_at DESC",
-                    (evidence_id,),
-                ).fetchall()
-                return [self._row_to_claim(row) for row in rows]
-        except sqlite3.Error as e:
-            logger.error(f"Failed to get claims for evidence: {e}")
-            raise StorageError(f"Failed to get claims for evidence: {e}")
 
     def get_timeline_events(
         self,
@@ -413,7 +375,7 @@ class JudgeMemoryStorage:
         """
         try:
             sql = "SELECT * FROM timeline_events WHERE 1=1"
-            params: List[Any] = []
+            params = []
 
             if case_id:
                 sql += " AND case_id = ?"
@@ -435,10 +397,9 @@ class JudgeMemoryStorage:
                 sql += " AND jurisdiction = ?"
                 params.append(jurisdiction)
 
-            sql += " ORDER BY event_date ASC LIMIT ?"
-            params.append(max(1, int(limit)))
+            sql += f" ORDER BY event_date ASC LIMIT {limit}"
 
-            with self._connect() as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 rows = conn.execute(sql, params).fetchall()
                 return [self._row_to_timeline_event(row) for row in rows]
 

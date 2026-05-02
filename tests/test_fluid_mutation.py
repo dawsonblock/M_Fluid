@@ -3,12 +3,12 @@ Test Fluid Memory mutation operations.
 """
 
 import pytest
-from m_flow.memory.fluid.mutation import (
+from fluid_memory.mutation import (
     compute_mutation_resistance,
     apply_state_delta,
     mutate_memory,
 )
-from m_flow.memory.fluid.models import MemoryItem
+from fluid_memory.models import MemoryItem
 
 
 def test_compute_mutation_resistance():

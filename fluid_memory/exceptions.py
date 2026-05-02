@@ -1,35 +1,21 @@
-"""
-Fluid Memory Core Exceptions
-
-Custom exceptions for the fluid memory system.
-"""
+"""Fluid Memory Exceptions"""
 
 
 class FluidMemoryError(Exception):
-    """Base exception for all fluid memory errors."""
-    pass
-
-
-class MemoryNotFoundError(FluidMemoryError):
-    """Raised when a memory ID is not found."""
-    pass
-
-
-class DuplicateMemoryError(FluidMemoryError):
-    """Raised when attempting to add a memory with duplicate content hash."""
-    pass
-
-
-class InvalidStateError(FluidMemoryError):
-    """Raised when an operation would result in invalid memory state."""
+    """Base exception for fluid memory errors."""
     pass
 
 
 class StorageError(FluidMemoryError):
-    """Raised when a storage operation fails."""
+    """Raised when storage operations fail."""
     pass
 
 
-class MutationError(FluidMemoryError):
-    """Raised when a mutation operation fails or is rejected."""
+class MemoryNotFoundError(FluidMemoryError):
+    """Raised when a memory item is not found."""
+    pass
+
+
+class DecayError(FluidMemoryError):
+    """Raised when decay calculations fail."""
     pass
