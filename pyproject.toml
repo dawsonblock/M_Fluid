@@ -254,7 +254,11 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.wheel]
+<<<<<<< /Users/dawsonblock/Downloads/m_flow-main/pyproject.toml
 packages = ["m_flow", "mflow_workers", "judge_memory"]
+=======
+packages = ["m_flow", "mflow_workers", "judge_memory", "fluid_memory"]
+>>>>>>> /Users/dawsonblock/.windsurf/worktrees/m_flow-main/m_flow-main-c3ca39da/pyproject.toml
 
 [tool.hatch.metadata]
 allow-direct-references = true
