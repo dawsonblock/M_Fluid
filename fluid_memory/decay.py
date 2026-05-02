@@ -182,7 +182,7 @@ class DecayManager:
             memory.attention_salience = new_value
 
         memory.updated_at = time()
-        return events[0] if events else None
+        return events[0]
 
     def apply_all_decay(self, memory: MemoryItem, days: float = 1.0) -> List[DecayEvent]:
         """Apply decay to all lanes."""
