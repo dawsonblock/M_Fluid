@@ -259,6 +259,8 @@ class JudgeMemoryStorage:
                 return record
         except sqlite3.Error as e:
             logger.error(f"Failed to store claim: {e}")
+            raise StorageError(f"Failed to store claim: {e}") from e
+            logger.error(f"Failed to store claim: {e}")
             raise StorageError(f"Failed to store claim: {e}")
     
     def get_claim(self, claim_id: str) -> Optional[ClaimRecord]:
