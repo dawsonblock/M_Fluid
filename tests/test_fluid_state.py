@@ -40,7 +40,7 @@ def test_memory_item_content_hash():
     """Test that content hash is computed automatically."""
     item = MemoryItem(content="Test content")
     assert item.content_hash is not None
-    assert len(item.content_hash) == 32  # MD5 is 32 hex chars
+    assert len(item.content_hash) == 64  # SHA256 is 64 hex chars
     
     # Same content should produce same hash
     item2 = MemoryItem(content="Test content")

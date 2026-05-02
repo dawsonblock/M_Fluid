@@ -8,12 +8,111 @@ Decay is lane-specific:
 - attention: Attention decay (very fast)
 """
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Tuple
+from time import time
+from typing import List, Optional, Tuple
 from fluid_memory.models import MemoryItem, DecayEvent
 from fluid_memory.config import FluidMemoryConfig
+from fluid_memory.events import MemoryEvent, EventType
 
 import uuid
+
+
+# How many seconds old an updated_at timestamp must be before decay kicks in
+_MIN_AGE_SECONDS = 3600.0  # 1 hour
+
+
+def compute_decay_amount(
+    salience: float,
+    elapsed_days: float,
+    decay_rate: float,
+    stability: float,
+) -> float:
+    """Compute the amount to subtract from a salience-like value.
+
+    Args:
+        salience: Current value (not used in formula, kept for API symmetry)
+        elapsed_days: Days elapsed since last update
+        decay_rate: Per-day decay rate
+        stability: Memory stability (0.0–1.0); higher = less decay
+
+    Returns:
+        Amount to decay (non-negative float)
+    """
+    effective_rate = decay_rate * (1.0 - stability)
+    return effective_rate * elapsed_days
+
+
+def apply_decay_to_memory(
+    memory: MemoryItem,
+    min_salience: float = 0.0,
+) -> Tuple[MemoryItem, bool]:
+    """Apply time-based salience decay to a single memory in-place.
+
+    Only decays memories whose ``updated_at`` is at least one hour old.
+
+    Args:
+        memory: Memory item to potentially decay
+        min_salience: Floor for salience after decay
+
+    Returns:
+        Tuple of (memory, was_decayed)
+    """
+    now = time()
+    elapsed_seconds = now - memory.updated_at
+    elapsed_days = elapsed_seconds / 86400.0
+
+    if elapsed_seconds < _MIN_AGE_SECONDS:
+        return memory, False
+
+    decay_amount = compute_decay_amount(
+        memory.salience,
+        elapsed_days,
+        memory.decay_rate,
+        memory.stability,
+    )
+    new_salience = max(min_salience, memory.salience - decay_amount)
+    memory.salience = new_salience
+    memory.updated_at = now
+    return memory, True
+
+
+def apply_decay(
+    memories: List[MemoryItem],
+    limit: Optional[int] = None,
+    min_salience: float = 0.0,
+) -> Tuple[List[MemoryItem], List[MemoryEvent]]:
+    """Apply decay to a collection of memories.
+
+    Args:
+        memories: List of memories to process
+        limit: Maximum number to process (None = all)
+        min_salience: Floor for salience after decay
+
+    Returns:
+        Tuple of (processed_memories, decay_events)
+    """
+    batch = memories if limit is None else memories[:limit]
+    events: List[MemoryEvent] = []
+    updated: List[MemoryItem] = []
+
+    for memory in batch:
+        old_salience = memory.salience
+        mem, was_decayed = apply_decay_to_memory(memory, min_salience)
+        updated.append(mem)
+        if was_decayed:
+            event = MemoryEvent(
+                event_id=f"decay_{uuid.uuid4().hex[:12]}",
+                memory_id=memory.memory_id,
+                event_type=EventType.DECAYED,
+                delta_json={
+                    "old_salience": old_salience,
+                    "new_salience": mem.salience,
+                    "lane": "time",
+                },
+            )
+            events.append(event)
+
+    return updated, events
 
 
 class DecayManager:
@@ -35,25 +134,11 @@ class DecayManager:
         lane: str = "time",
         days: float = 1.0
     ) -> Tuple[float, List[DecayEvent]]:
-        """Calculate decay for a memory item.
-
-        Args:
-            memory: The memory to decay
-            lane: Decay lane (time, legal, trust, interest, attention)
-            days: Number of days to simulate
-
-        Returns:
-            Tuple of (new_salience, list of decay events)
-        """
+        """Calculate decay for a memory item."""
         rate = self.lane_rates.get(lane, self.config.default_decay_rate)
-
-        # Apply stability modifier (more stable = less decay)
         effective_rate = rate * (1.0 - memory.stability)
-
-        # Calculate decay amount
         decay_amount = effective_rate * days
 
-        # Get current lane value
         lane_values = {
             "time": memory.salience,
             "legal": memory.legal_salience,
@@ -65,7 +150,6 @@ class DecayManager:
         current_value = lane_values.get(lane, memory.salience)
         new_value = max(0.0, current_value - decay_amount)
 
-        # Create decay event
         event = DecayEvent(
             event_id=f"decay_{uuid.uuid4().hex[:12]}",
             memory_id=memory.memory_id,
@@ -83,19 +167,9 @@ class DecayManager:
         lane: str = "time",
         days: float = 1.0
     ) -> DecayEvent:
-        """Apply decay to a memory item in-place.
-
-        Args:
-            memory: The memory to modify
-            lane: Decay lane
-            days: Days to decay
-
-        Returns:
-            The decay event recorded
-        """
+        """Apply decay to a memory item in-place."""
         new_value, events = self.calculate_decay(memory, lane, days)
 
-        # Update the appropriate lane
         if lane == "time":
             memory.salience = new_value
         elif lane == "legal":
@@ -107,20 +181,11 @@ class DecayManager:
         elif lane == "attention":
             memory.attention_salience = new_value
 
-        memory.updated_at = datetime.utcnow()
-
+        memory.updated_at = time()
         return events[0] if events else None
 
     def apply_all_decay(self, memory: MemoryItem, days: float = 1.0) -> List[DecayEvent]:
-        """Apply decay to all lanes.
-
-        Args:
-            memory: The memory to modify
-            days: Days to decay
-
-        Returns:
-            List of decay events
-        """
+        """Apply decay to all lanes."""
         events = []
         for lane in self.lane_rates.keys():
             event = self.apply_decay(memory, lane, days)

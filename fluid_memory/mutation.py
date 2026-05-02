@@ -124,7 +124,7 @@ def mutate_memory(
     # Apply content change if provided
     if new_content is not None and new_content != memory.content:
         memory.content = new_content
-        memory.content_hash = hashlib.md5(new_content.encode("utf-8")).hexdigest()
+        memory.content_hash = hashlib.sha256(new_content.encode("utf-8")).hexdigest()
         applied_changes["content"] = {
             "old_hash": old_hash,
             "new_hash": memory.content_hash,
@@ -142,7 +142,7 @@ def mutate_memory(
             applied_changes["state"] = state_changes
     
     # Update timestamp
-    memory.update_timestamp()
+    memory.touch()
     
     # Create event
     event = MemoryEvent(

@@ -16,6 +16,11 @@ class MemoryNotFoundError(FluidMemoryError):
     pass
 
 
+class DuplicateMemoryError(FluidMemoryError):
+    """Raised when attempting to insert content that already exists."""
+    pass
+
+
 class DecayError(FluidMemoryError):
     """Raised when decay calculations fail."""
     pass
