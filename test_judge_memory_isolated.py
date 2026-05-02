@@ -7,6 +7,8 @@ import asyncio
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from judge_memory import (
     JudgeMemoryService,
     JudgeMemoryConfig,
@@ -96,8 +98,6 @@ def test_import_isolation():
 
 async def test_orphaned_claims_blocked():
     """Test that claims cannot be created without evidence."""
-    import tempfile
-    import pytest
     from judge_memory import JudgeMemoryService, JudgeMemoryConfig
     from judge_memory.exceptions import EvidenceNotFoundError
 

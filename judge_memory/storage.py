@@ -171,7 +171,10 @@ class JudgeMemoryStorage:
                     ).fetchone()
                     if row:
                         return self._row_to_evidence(row)
-                    raise
+                    raise StorageError(
+                        f"content_hash collision for evidence_id={record.evidence_id} "
+                        "but existing record could not be retrieved"
+                    )
         except sqlite3.Error as e:
             logger.error(f"Failed to store evidence: {e}")
             raise StorageError(f"Failed to store evidence: {e}") from e
