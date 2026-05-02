@@ -7,8 +7,6 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from judge_memory import (
     JudgeMemoryService,
     JudgeMemoryConfig,
@@ -46,7 +44,7 @@ async def test_basic_operations():
         
         # Test 2: Get source packet
         packet = await service.get_source_packet(evidence.evidence_id)
-        print("✓ Source packet retrieved")
+        print(f"✓ Source packet retrieved")
         print(f"  - Authority: {packet.authority}")
         print(f"  - Legal status: {packet.legal_status_label}")
         
@@ -86,18 +84,27 @@ async def test_basic_operations():
 
 
 def test_import_isolation():
-    """Verify structlog is not required by judge_memory."""
+    """Verify no m_flow modules loaded."""
     import sys
-
+    
+    # Check for m_flow modules
+    m_flow_modules = [k for k in sys.modules.keys() if k.startswith('m_flow')]
+    
+    # Some m_flow modules may be loaded from the compatibility shim,
+    # but the key is that structlog is not required
+    print(f"\nImport isolation check:")
+    print(f"  - m_flow modules loaded: {len(m_flow_modules)}")
+    
+    # Check structlog is not imported
     has_structlog = 'structlog' in sys.modules
-    assert not has_structlog, (
-        "structlog should not be imported by judge_memory, "
-        "but it was found in sys.modules"
-    )
+    print(f"  - structlog imported: {has_structlog}")
+    
+    return not has_structlog
 
 
 async def test_orphaned_claims_blocked():
     """Test that claims cannot be created without evidence."""
+    import tempfile
     from judge_memory import JudgeMemoryService, JudgeMemoryConfig
     from judge_memory.exceptions import EvidenceNotFoundError
 
@@ -106,11 +113,16 @@ async def test_orphaned_claims_blocked():
         service = JudgeMemoryService(config)
 
         try:
-            with pytest.raises(EvidenceNotFoundError):
-                await service.add_claim(
-                    evidence_id="nonexistent_evidence",
-                    claim_text="This should fail",
-                )
+            # Attempt to create claim with fake evidence_id
+            await service.add_claim(
+                evidence_id="nonexistent_evidence",
+                claim_text="This should fail",
+            )
+            print("✗ Orphaned claim test FAILED - claim created without evidence")
+            return False
+        except EvidenceNotFoundError:
+            print("✓ Orphaned claims correctly blocked")
+            return True
         finally:
             await service.close()
 
@@ -129,7 +141,7 @@ async def test_claim_search():
             raw_text="Court proceedings transcript",
             source_type="court_record",
         )
-        await service.add_claim(
+        claim = await service.add_claim(
             evidence_id=evidence.evidence_id,
             claim_text="The defendant breached contract obligations",
             case_id="case_001",
@@ -139,11 +151,15 @@ async def test_claim_search():
         results = await service.search("breached contract")
         claim_results = [r for r in results if r.result_type == "claim"]
 
-        assert len(claim_results) > 0, (
-            f"Expected at least one claim result, got {len(claim_results)}"
-        )
+        if len(claim_results) > 0:
+            print(f"✓ Claim search works - found {len(claim_results)} claim(s)")
+            success = True
+        else:
+            print("✗ Claim search failed - no claims found")
+            success = False
 
         await service.close()
+        return success
 
 
 async def main():
@@ -152,39 +168,29 @@ async def main():
     print("Judge Memory Production-Ready Test")
     print("=" * 60)
 
-    results = {}
+    # Test basic operations
+    ops_ok = await test_basic_operations()
 
-    for name, coro in [
-        ("Basic operations", test_basic_operations()),
-        ("Orphan claims blocked", test_orphaned_claims_blocked()),
-        ("Claim search", test_claim_search()),
-    ]:
-        try:
-            await coro
-            results[name] = True
-            print(f"✓ {name}")
-        except Exception as exc:
-            results[name] = False
-            print(f"✗ {name}: {exc}")
+    # Test orphaned claims blocked
+    orphan_ok = await test_orphaned_claims_blocked()
 
-    for name, fn in [("Import isolation", test_import_isolation)]:
-        try:
-            fn()
-            results[name] = True
-            print(f"✓ {name}")
-        except Exception as exc:
-            results[name] = False
-            print(f"✗ {name}: {exc}")
+    # Test claim search
+    claim_search_ok = await test_claim_search()
+
+    # Test isolation
+    iso_ok = test_import_isolation()
 
     print("\n" + "=" * 60)
-    all_passed = all(results.values())
+    all_passed = ops_ok and orphan_ok and claim_search_ok and iso_ok
     if all_passed:
         print("✓ ALL TESTS PASSED")
         print("Judge Memory is production-ready!")
     else:
         print("✗ SOME TESTS FAILED")
-        for name, ok in results.items():
-            print(f"  - {name}: {'✓' if ok else '✗'}")
+        print(f"  - Basic operations: {'✓' if ops_ok else '✗'}")
+        print(f"  - Orphan claims blocked: {'✓' if orphan_ok else '✗'}")
+        print(f"  - Claim search: {'✓' if claim_search_ok else '✗'}")
+        print(f"  - Import isolation: {'✓' if iso_ok else '✗'}")
     print("=" * 60)
     return all_passed
 

@@ -95,7 +95,7 @@ class JudgeMemorySearch:
                     title=f"Claim: {claim.claim_text[:50]}...",
                     content_preview=self._preview(claim.claim_text, 200),
                     source_type=None,
-                    jurisdiction=None,  # claims don't store jurisdiction directly
+                    jurisdiction=jurisdiction,
                     score=claim.confidence,  # Use claim confidence as score
                 )
             )

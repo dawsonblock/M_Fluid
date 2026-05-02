@@ -1,60 +1,92 @@
-"""
-Fluid Memory Configuration
+"""Fluid Memory Configuration"""
 
-Configuration class with sensible defaults for the fluid memory system.
-"""
-
-from typing import Optional
 from pathlib import Path
+from typing import Optional
+from pydantic import BaseModel, Field
 
 
-class FluidMemoryConfig:
+class FluidMemoryConfig(BaseModel):
+    """Configuration for Fluid Memory engine.
+
+    All parameters have safe defaults for standalone use.
     """
-    Configuration for the Fluid Memory Core.
-    
-    All fields have sensible defaults so the system works out of the box.
-    
-    Attributes:
-        data_dir: Directory for SQLite database
-        sqlite_path: Full path to SQLite database (derived from data_dir if not set)
-        default_salience: Initial salience for new memories
-        default_confidence: Initial confidence for new memories
-        default_volatility: Initial volatility for new memories
-        default_stability: Initial stability for new memories
-        default_decay_rate: Initial decay rate for new memories
-        access_salience_boost: Salience increase per access
-        reinforcement_boost: Amount reinforcement strengthens memory
-        contradiction_penalty: Amount contradiction weakens memory
-        mutation_resistance_enabled: Whether stability resists mutation
-    """
-    
-    def __init__(
-        self,
-        data_dir: Optional[str] = None,
-        sqlite_path: Optional[str] = None,
-        default_salience: float = 0.5,
-        default_confidence: float = 0.5,
-        default_volatility: float = 0.3,
-        default_stability: float = 0.5,
-        default_decay_rate: float = 0.05,
-        access_salience_boost: float = 0.02,
-        reinforcement_boost: float = 0.1,
-        contradiction_penalty: float = 0.1,
-        mutation_resistance_enabled: bool = True,
-    ):
-        self.data_dir = data_dir or ".fluid_memory"
-        self.sqlite_path = sqlite_path or str(Path(self.data_dir) / "fluid_memory.db")
-        self.default_salience = self._clamp01(default_salience)
-        self.default_confidence = self._clamp01(default_confidence)
-        self.default_volatility = self._clamp01(default_volatility)
-        self.default_stability = self._clamp01(default_stability)
-        self.default_decay_rate = self._clamp01(default_decay_rate)
-        self.access_salience_boost = self._clamp01(access_salience_boost)
-        self.reinforcement_boost = self._clamp01(reinforcement_boost)
-        self.contradiction_penalty = self._clamp01(contradiction_penalty)
-        self.mutation_resistance_enabled = mutation_resistance_enabled
-    
-    @staticmethod
-    def _clamp01(value: float) -> float:
-        """Clamp value to [0.0, 1.0]."""
-        return max(0.0, min(1.0, value))
+
+    data_dir: Path = Field(
+        default=Path("./fluid_memory_data"),
+        description="Directory for SQLite database and storage"
+    )
+
+    db_path: Optional[Path] = None
+
+    # Decay configuration
+    default_decay_rate: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=1.0,
+        description="Default daily decay rate for salience"
+    )
+
+    legal_decay_rate: float = Field(
+        default=0.02,
+        ge=0.0,
+        le=1.0,
+        description="Decay rate for legal lane (slower)"
+    )
+
+    trust_decay_rate: float = Field(
+        default=0.03,
+        ge=0.0,
+        le=1.0,
+        description="Decay rate for trust lane"
+    )
+
+    interest_decay_rate: float = Field(
+        default=0.08,
+        ge=0.0,
+        le=1.0,
+        description="Decay rate for interest lane (faster)"
+    )
+
+    attention_decay_rate: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Decay rate for attention lane (fastest)"
+    )
+
+    # Reinforcement
+    reinforcement_boost: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Salience boost per reinforcement"
+    )
+
+    # Contradiction
+    contradiction_penalty: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=1.0,
+        description="Confidence penalty per contradiction"
+    )
+
+    # Retrieval
+    retrieval_threshold: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Minimum score for retrieval results"
+    )
+
+    max_results: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Maximum retrieval results"
+    )
+
+    def model_post_init(self, __context) -> None:
+        """Set up derived paths after initialization."""
+        if self.db_path is None:
+            self.db_path = self.data_dir / "fluid_memory.db"
+        self.data_dir.mkdir(parents=True, exist_ok=True)
