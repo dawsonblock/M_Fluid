@@ -34,7 +34,7 @@ class MemoryItem(BaseModel):
     last_accessed_at: Optional[float] = Field(default=None)
 
     # Access tracking
-    access_count: int = Field(default=0)
+    access_count: int = Field(default=0, ge=0)
 
     # Fluid state — stored as plain floats; validators clamp on construction/assignment
     salience: float = Field(default=0.5)
