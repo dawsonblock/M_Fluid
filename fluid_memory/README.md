@@ -144,7 +144,7 @@ FluidMemoryConfig(
 
 ## Deduplication
 
-Memories are deduplicated by SHA256 content hash. Adding identical content returns the existing memory with updated access tracking.
+Memories are deduplicated by SHA256 content hash. Adding identical content does not create a new memory; `FluidMemoryEngine.add_memory()` raises `DuplicateMemoryError` when the same content hash already exists.
 
 ## Storage
 
