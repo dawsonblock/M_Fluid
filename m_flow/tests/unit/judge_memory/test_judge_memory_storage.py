@@ -144,8 +144,8 @@ def test_get_claims_by_evidence(temp_storage):
     assert len(claims) == 2
 
 
-def test_reject_claim_for_missing_evidence(temp_storage):
-    """Test that claim without valid evidence is rejected."""
+def test_claim_storage_without_evidence(temp_storage):
+    """Test claim stored without evidence (SQLite FK not enforced)."""
     claim = ClaimRecord(
         claim_id="cl_orphan",
         evidence_id="ev_nonexistent",
