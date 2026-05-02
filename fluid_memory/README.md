@@ -117,7 +117,7 @@ engine.reinforce(memory_id, amount=0.1)
 
 ### Contradict
 ```python
-engine.contradict(memory_id, penalty=0.2)
+engine.contradict(memory_id, amount=0.2)
 # Decreases confidence
 ```
 
