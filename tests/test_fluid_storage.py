@@ -6,9 +6,9 @@ import tempfile
 import pytest
 from pathlib import Path
 
-from fluid_memory.storage import MemoryStorage
-from fluid_memory.models import MemoryItem, MemoryLink
-from fluid_memory.events import MemoryEvent, EventType
+from m_flow.memory.fluid.storage import MemoryStorage
+from m_flow.memory.fluid.models import MemoryItem, MemoryLink
+from m_flow.memory.fluid.events import MemoryEvent, EventType
 
 
 @pytest.fixture
