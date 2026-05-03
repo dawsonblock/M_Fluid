@@ -225,21 +225,39 @@ class FluidMemoryAdapter:
                 + profile["independence"] * 0.20
             )
             confidence = profile.get("legal_status_weight", 0.5)
-            meta: Dict[str, Any] = {
-                "source_type": source_type,
-                "decay_lane": self._get_decay_lane(source_type),
-            }
-            if jurisdiction:
-                meta["jurisdiction"] = jurisdiction
-            if judge_id:
-                meta["judge_id"] = judge_id
-            self._touch_fluid_node(
-                evidence_id,
-                tags=[source_type, "evidence"],
-                salience=salience,
-                confidence=confidence,
-                metadata=meta,
-            )
+            decay_lane = self._get_decay_lane(source_type)
+            try:
+                from m_flow.memory.fluid.models import FluidUpdateEvent
+
+                event = FluidUpdateEvent(
+                    touched_node_ids=[evidence_id],
+                    source_id=evidence_id,
+                    source_type=source_type,
+                    source_trust=profile["authority"],
+                    salience=salience,
+                    legal_weight=confidence,
+                    decay_lane=decay_lane,
+                    jurisdiction=jurisdiction,
+                    judge_id=judge_id,
+                    event_confidence=confidence,
+                )
+                await self._engine.touch(event)
+            except ImportError:
+                meta: Dict[str, Any] = {
+                    "source_type": source_type,
+                    "decay_lane": decay_lane,
+                }
+                if jurisdiction:
+                    meta["jurisdiction"] = jurisdiction
+                if judge_id:
+                    meta["judge_id"] = judge_id
+                self._touch_fluid_node(
+                    evidence_id,
+                    tags=[source_type, "evidence"],
+                    salience=salience,
+                    confidence=confidence,
+                    metadata=meta,
+                )
             logger.debug(f"Fluid state touched for evidence {evidence_id}")
         except Exception as e:
             logger.warning(
@@ -264,22 +282,41 @@ class FluidMemoryAdapter:
             claim_salience = (
                 0.6 if claim_status in {"confirmed", "presumed_true"} else 0.4
             )
-            meta: Dict[str, Any] = {
-                "source_type": source_type,
-                "decay_lane": self._get_decay_lane(source_type),
-                "evidence_id": evidence_id,
-            }
-            if jurisdiction:
-                meta["jurisdiction"] = jurisdiction
-            if judge_id:
-                meta["judge_id"] = judge_id
-            self._touch_fluid_node(
-                claim_id,
-                tags=[source_type, "claim"],
-                salience=claim_salience,
-                confidence=confidence,
-                metadata=meta,
-            )
+            decay_lane = self._get_decay_lane(source_type)
+            try:
+                from m_flow.memory.fluid.models import FluidUpdateEvent
+
+                event = FluidUpdateEvent(
+                    touched_node_ids=[claim_id],
+                    source_id=evidence_id,
+                    source_type=source_type,
+                    source_trust=profile["authority"],
+                    salience=claim_salience,
+                    legal_weight=confidence,
+                    decay_lane=decay_lane,
+                    supports=[evidence_id],
+                    jurisdiction=jurisdiction,
+                    judge_id=judge_id,
+                    event_confidence=confidence,
+                )
+                await self._engine.touch(event)
+            except ImportError:
+                meta: Dict[str, Any] = {
+                    "source_type": source_type,
+                    "decay_lane": decay_lane,
+                    "evidence_id": evidence_id,
+                }
+                if jurisdiction:
+                    meta["jurisdiction"] = jurisdiction
+                if judge_id:
+                    meta["judge_id"] = judge_id
+                self._touch_fluid_node(
+                    claim_id,
+                    tags=[source_type, "claim"],
+                    salience=claim_salience,
+                    confidence=confidence,
+                    metadata=meta,
+                )
             logger.debug(f"Fluid state touched for claim {claim_id}")
         except Exception as e:
             logger.warning(f"Failed to touch fluid state for claim {claim_id}: {e}")

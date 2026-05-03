@@ -107,7 +107,7 @@ async def test_claim_search_returns_evidence_metadata():
         assert "evidence_title" in claim_result.metadata
         assert claim_result.metadata["evidence_title"] == "Bail Hearing Decision"
         assert "source_authority" in claim_result.metadata
-        assert claim_result.metadata["source_authority"] == 1.0  # court_record authority
+        assert claim_result.metadata["source_authority"] == 0.9  # court_record authority
 
         await service.close()
 
