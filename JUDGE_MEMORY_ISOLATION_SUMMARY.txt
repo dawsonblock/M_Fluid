@@ -1,0 +1,59 @@
+================================================================================
+JUDGE MEMORY ISOLATION - LOCAL PROTOTYPE
+================================================================================
+
+PHASE 1 COMPLETED (Critical Blockers Fixed):
+  ✅ Fixed pyproject.toml packaging (judge_memory now in wheel packages)
+  ✅ Fixed orphaned claims bug (add_claim validates evidence_id exists)
+  ✅ Enhanced search (searches evidence body via content_preview)
+  ✅ Implemented claim search (search_claims in storage + search.py)
+  ✅ Implemented timeline query (get_timeline_events in storage)
+
+PHASE 2 COMPLETED (Architecture Cleanup):
+  ✅ Deprecated m_flow.judge_memory import (DeprecationWarning added)
+  ✅ Strengthened tests (orphaned claims, claim search, evidence search)
+
+ORIGINAL ISOLATION WORK:
+  Created top-level judge_memory/ package with:
+  - Minimal dependencies (only Pydantic + stdlib)
+  - Defensive imports for optional M-flow integration
+  - Self-contained logging (no structlog)
+  - Full functionality preserved
+
+FILES CREATED/MODIFIED:
+  judge_memory/ (11 files)
+  pyproject.toml - Added judge_memory to wheel packages
+  m_flow/judge_memory/__init__.py - Added deprecation warning
+  test_judge_memory_isolated.py - Strengthened test suite
+
+KEY BUG FIXES:
+  1. Orphaned claims prevented (EvidenceNotFoundError raised for invalid ID)
+  2. Evidence body search works (content_preview column added)
+  3. Claim search works (search_claims method implemented)
+  4. Timeline query works (get_timeline_events implemented)
+
+IMPORT PATHS:
+  New (recommended, isolated):
+    from judge_memory import JudgeMemoryService, JudgeMemoryConfig
+
+  Old (deprecated, shows warning):
+    from m_flow.judge_memory import JudgeMemoryService
+
+VERIFICATION:
+  $ python3 test_judge_memory_isolated.py
+  Result: All tests pass including:
+    - Basic operations (ingest, claims, search, review)
+    - Orphaned claims blocked
+    - Claim search works
+    - Import isolation (no structlog required)
+
+PYTHON VERSION COMPATIBILITY:
+  - judge_memory: Python 3.8+ (uses Optional[] syntax)
+  - m_flow.judge_memory: Deprecated, Python 3.10+ only
+
+NOTE:
+  See docs/MEMORY_SYSTEM_STATUS.md for current system architecture.
+
+================================================================================
+STATUS: LOCAL PROTOTYPE - TESTABLE BUT NOT PRODUCTION-GRADE
+================================================================================

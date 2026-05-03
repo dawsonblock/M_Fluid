@@ -1,0 +1,129 @@
+# Fluid Memory — Default Source Trust Registry
+#
+# These are the baseline presets shipped with the package.
+# Override any entry by adding a row to the fluid_source_registry DB table
+# at runtime (no restart required).
+#
+# Fields per source:
+#   trust        [0.0–1.0]  Base trust weight applied to fluid state
+#   legal_weight [0.0–1.0]  Weight for legal/evidential scoring
+#   decay_lane   string     "attention" | "interest" | "trust" | "legal" | "contradiction"
+#                           Decay rates (per day):
+#                             attention      = 0.20  (short-term, breaking news)
+#                             interest       = 0.05  (default, user engagement)
+#                             trust          = 0.000 (immutable, never decays)
+#                             legal          = 0.000 (immutable, court/gov)
+#                             contradiction  = 0.01  (pressure eases slowly)
+#   description  string     Human-readable note
+
+sources:
+
+  court_record:
+    trust: 0.95
+    legal_weight: 1.00
+    decay_lane: legal
+    description: Court judgments, orders, official records
+    authority: 1.00
+    verifiability: 0.95
+    originality: 1.00
+    independence: 0.95
+    legal_status_label: official_record
+    legal_status_weight: 0.95
+    default_claim_status: presumed_true
+
+  government_data:
+    trust: 0.85
+    legal_weight: 0.80
+    decay_lane: legal
+    description: Government datasets and publications
+    authority: 0.95
+    verifiability: 0.85
+    originality: 0.90
+    independence: 0.80
+    legal_status_label: official_record
+    legal_status_weight: 0.90
+    default_claim_status: presumed_true
+
+  police_release:
+    trust: 0.80
+    legal_weight: 0.70
+    decay_lane: legal
+    description: Official police press releases
+    authority: 0.85
+    verifiability: 0.75
+    originality: 0.95
+    independence: 0.70
+    legal_status_label: official_record
+    legal_status_weight: 0.80
+    default_claim_status: needs_verification
+
+  academic_paper:
+    trust: 0.75
+    legal_weight: 0.40
+    decay_lane: interest
+    description: Peer-reviewed academic publications
+    authority: 0.80
+    verifiability: 0.85
+    originality: 0.90
+    independence: 0.75
+    legal_status_label: verified
+    legal_status_weight: 0.70
+    default_claim_status: needs_verification
+
+  expert_report:
+    trust: 0.70
+    legal_weight: 0.50
+    decay_lane: interest
+    description: Expert witness reports and assessments
+    authority: 0.75
+    verifiability: 0.70
+    originality: 0.85
+    independence: 0.70
+    legal_status_label: verified
+    legal_status_weight: 0.70
+    default_claim_status: needs_verification
+
+  witness_statement:
+    trust: 0.50
+    legal_weight: 0.40
+    decay_lane: interest
+    description: Witness statements and depositions
+    authority: 0.60
+    verifiability: 0.50
+    originality: 0.95
+    independence: 0.85
+    legal_status_label: hearsay
+    legal_status_weight: 0.50
+    default_claim_status: needs_verification
+
+  mainstream_news:
+    trust: 0.60
+    legal_weight: 0.30
+    decay_lane: interest
+    description: Established news organisations
+    authority: 0.65
+    verifiability: 0.60
+    originality: 0.70
+    independence: 0.60
+    legal_status_label: unverified
+    legal_status_weight: 0.50
+    default_claim_status: needs_verification
+
+  blog_social:
+    trust: 0.25
+    legal_weight: 0.05
+    decay_lane: attention
+    description: Blogs, social media, unverified sources
+    authority: 0.30
+    verifiability: 0.20
+    originality: 0.60
+    independence: 0.40
+    legal_status_label: unverified
+    legal_status_weight: 0.20
+    default_claim_status: presumed_false
+
+  unknown:
+    trust: 0.10
+    legal_weight: 0.00
+    decay_lane: interest
+    description: Unclassified or unknown source type
