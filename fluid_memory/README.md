@@ -13,7 +13,7 @@ Fluid Memory provides a dynamic memory field where each memory item tracks:
 ## Installation
 
 Requires only:
-- Python 3.9+
+- Python 3.10+
 - Pydantic
 
 ```bash

@@ -3,6 +3,7 @@ Test advanced features: semantic search, contradiction detection, audit logging.
 """
 
 import tempfile
+import pytest
 from fluid_memory import FluidMemoryEngine, FluidMemoryConfig
 from fluid_memory.models import MemoryItem
 from fluid_memory.storage import MemoryStorage, _compute_embedding, _cosine_similarity
@@ -69,7 +70,9 @@ def test_semantic_search_respects_invalidated():
         assert len(results) == 0
 
         # With include_invalidated=True, should find it
-        results = storage.semantic_search("Test content", threshold=0.3, include_invalidated=True)
+        results = storage.semantic_search(
+            "Test content", threshold=0.3, include_invalidated=True
+        )
         assert len(results) == 1
 
 
@@ -100,6 +103,7 @@ def test_contradiction_detection_on_add():
         assert memory2.contradiction_count >= 0  # May or may not trigger
 
 
+@pytest.mark.timeout(30)
 def test_audit_logger_creates_events():
     """Test that audit logger creates structured events."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -147,7 +151,9 @@ def test_audit_logger_contradiction_events():
 def test_retrieve_with_semantic_search():
     """Test that retrieve supports semantic search flag."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        engine = FluidMemoryEngine(FluidMemoryConfig(db_path=f"{tmpdir}/engine.db"), enable_audit=False)
+        engine = FluidMemoryEngine(
+            FluidMemoryConfig(db_path=f"{tmpdir}/engine.db"), enable_audit=False
+        )
 
         # Add memories
         engine.add_memory(content="Python programming tutorial")
@@ -169,10 +175,13 @@ def test_retrieve_with_semantic_search():
             assert any(r.match_type == "semantic" for r in semantic_results)
 
 
+@pytest.mark.timeout(30)
 def test_retrieve_logs_access_events():
     """Test that retrieval logs access events."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        engine = FluidMemoryEngine(FluidMemoryConfig(db_path=f"{tmpdir}/engine.db"), enable_audit=True)
+        engine = FluidMemoryEngine(
+            FluidMemoryConfig(db_path=f"{tmpdir}/engine.db"), enable_audit=True
+        )
 
         # Add memory
         memory = engine.add_memory(content="Test content")
@@ -190,7 +199,9 @@ def test_contradiction_applies_multiple_state_changes():
         engine = FluidMemoryEngine(FluidMemoryConfig(db_path=f"{tmpdir}/engine.db"))
 
         # Add memory
-        memory = engine.add_memory(content="Test content", confidence=0.8, detect_contradictions=False)
+        memory = engine.add_memory(
+            content="Test content", confidence=0.8, detect_contradictions=False
+        )
 
         # Record initial state
         initial_confidence = memory.confidence

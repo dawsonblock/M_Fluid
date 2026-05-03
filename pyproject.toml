@@ -6,13 +6,9 @@ version = "0.3.6"
 description = "M-flow builds semantic memory layers that help LLMs reason over your data with structured knowledge graphs."
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "Apache-2.0"}
-authors = [
-    {name = "Junting Hua"},
-]
-maintainers = [
-    {name = "Junting Hua"},
-]
+license = { text = "Apache-2.0" }
+authors = [{ name = "Junting Hua" }]
+maintainers = [{ name = "Junting Hua" }]
 
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -92,9 +88,9 @@ huggingface = ["transformers>=4.45.0,<6"]
 mistral = ["mistral-common>=1.5.0,<2"]
 ollama = ["transformers>=4.45.0,<6"]
 cohere = ["cohere>=5.0"]
-deepseek = []   # OpenAI-compatible — routed via litellm
-qwen = []       # DashScope endpoint — routed via litellm
-doubao = []     # VolcEngine endpoint — routed via litellm
+deepseek = []                             # OpenAI-compatible — routed via litellm
+qwen = []                                 # DashScope endpoint — routed via litellm
+doubao = []                               # VolcEngine endpoint — routed via litellm
 
 # Graph databases
 neo4j = ["neo4j>=5.27.0,<6"]
@@ -114,19 +110,13 @@ postgres-binary = [
 ]
 
 # Vector stores
-chromadb = [
-    "chromadb>=0.5,<0.7",
-    "pypika==0.48.9",
-]
+chromadb = ["chromadb>=0.5,<0.7", "pypika==0.48.9"]
 redis = ["redis>=5.0.0,<8.0.0"]
 pinecone = ["pinecone>=5.0"]
 milvus = ["pymilvus>=2.4"]
 
 # Local embeddings (default uses OpenAI API)
-embeddings = [
-    "fastembed<=0.8.0",
-    "onnxruntime<=1.22.1",
-]
+embeddings = ["fastembed<=0.8.0", "onnxruntime<=1.22.1"]
 
 # Document parsers & web scraping
 docs = [
@@ -158,9 +148,7 @@ llama-index = ["llama-index-core>=0.12.0,<0.15"]
 
 # Coreference resolution (install from source: pip install -e ./coreference)
 # Not available via PyPI — use source install for coreference support
-coreference-full = [
-    "spacy>=3.7.0,<4.0.0",
-]
+coreference-full = ["spacy>=3.7.0,<4.0.0"]
 
 # Code analysis
 codegraph = [
@@ -197,6 +185,7 @@ dev = [
     "pytest>=7.4.0,<10",
     "pytest-cov>=6.0.0,<8.0.0",
     "pytest-asyncio>=0.21.0,<1.4",
+    "pytest-timeout>=2.2.0,<3",
     "coverage>=7.3.0,<8",
     "mypy>=1.7.0,<2",
     "pre-commit>=4.0.0,<5",
@@ -268,19 +257,14 @@ python = "3.11"
 
 [tool.ruff]
 line-length = 120
-exclude = [
-    "build/",
-    "dist/",
-    "migrations/",
-    "notebooks/",
-]
+exclude = ["build/", "dist/", "migrations/", "notebooks/"]
 
 [tool.ruff.lint]
 ignore = [
-    "F401",   # unused imports (re-exports in __init__.py)
-    "F403",   # wildcard imports
-    "E402",   # module-level import not at top (lazy / circular-safe imports)
-    "F821",   # undefined name in string type annotations (forward refs)
+    "F401", # unused imports (re-exports in __init__.py)
+    "F403", # wildcard imports
+    "E402", # module-level import not at top (lazy / circular-safe imports)
+    "F821", # undefined name in string type annotations (forward refs)
 ]
 
 [tool.ruff.lint.per-file-ignores]

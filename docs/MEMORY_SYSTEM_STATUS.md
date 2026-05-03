@@ -35,9 +35,9 @@ from judge_memory import JudgeMemoryService, JudgeMemoryConfig
 - ✅ Timeline queries
 - ✅ Orphaned claim prevention (validates evidence_id exists)
 - ✅ Evidence vault health check (create_verified factory)
-- ✅ Semantic/vector search using embeddings
-- ✅ Real-time contradiction detection on memory add
-- ✅ Enterprise-grade audit logging with JSON output
+- ✅ Keyword-only search (FTS5); no vector/embedding search
+- ✅ Heuristic contradiction flagging (tag + confidence similarity)
+- ✅ Structured JSON audit logging
 
 **Features (Implemented):**
 - ✅ Fluid memory integration — uses standalone `fluid_memory.FluidMemoryEngine`; hardcoded profiles are a local fallback only. Zero dependency on `m_flow`.
@@ -100,9 +100,9 @@ from fluid_memory import FluidMemoryEngine, FluidMemoryConfig
 - ✅ Mutation safety (protected fields, allowlist, UUID event IDs)
 - ✅ Duplicate content detection
 - ✅ Admin retrieval methods for invalidated memories
-- ✅ Semantic/vector search using embeddings
-- ✅ Real-time contradiction detection when adding memories
-- ✅ Enterprise-grade audit logging with JSON output
+- ✅ Local hashed character-bigram similarity search
+- ✅ Heuristic contradiction flagging (tag + confidence similarity)
+- ✅ Structured JSON audit logging
 
 **Known Issues (Fixed):**
 - ✅ Uses UUID4 (not Python hash()) for event IDs

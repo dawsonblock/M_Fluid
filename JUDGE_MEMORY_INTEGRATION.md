@@ -134,11 +134,11 @@ health = await service.healthcheck()
 2. Graph retrieval requires external Neo4j/Kuzu
 3. Fluid memory is minimal integration (disabled by default)
 4. LLM contradiction detection is off by default
-5. Unit tests only (no integration tests due to Python 3.9 compatibility issues in full m_flow stack)
+5. Unit tests only (no integration tests — full m_flow stack requires Python 3.10+)
 
 ## Tests
 
-Tests are written but cannot run due to Python 3.9 compatibility issues in the broader m_flow codebase (union syntax `|`). The judge_memory module itself is Python 3.9+ compatible.
+Tests require Python 3.10+ (the broader m_flow codebase uses union syntax `|`). The judge_memory module itself runs on Python 3.10+.
 
 To run tests in a compatible environment:
 ```bash
