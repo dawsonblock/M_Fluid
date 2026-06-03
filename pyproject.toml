@@ -159,7 +159,7 @@ codegraph = [
 ]
 
 # Evaluation & analytics
-deepeval = ["deepeval>=3.0.0,<4"]
+deepeval = ["deepeval>=3.0.0,<5"]
 evals = [
     "plotly>=5.18.0,<7",
     "gdown>=5.1.0,<7",
