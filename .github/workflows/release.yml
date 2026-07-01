@@ -35,7 +35,7 @@ jobs:
           ref: ${{ inputs.flavour }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v7
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v7
 
       - name: Derive semantic version and push tag
         id: semver
@@ -51,7 +51,7 @@ jobs:
           git push origin "${TAG}"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
           tag_name: ${{ steps.semver.outputs.tag }}
           generate_release_notes: true
@@ -73,7 +73,7 @@ jobs:
           ref: ${{ inputs.flavour }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v7
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v7
 
       - name: Prepare Python environment
         run: |
