@@ -45,7 +45,7 @@ jobs:
     name: "Ruff static analysis & format verification"
     defaults: {run: {shell: bash}}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v4
         name: "Clone M-Flow repository"
         with: {fetch-depth: 0}
 
@@ -54,10 +54,10 @@ jobs:
         with: {python-version: "${{ inputs.python-version }}"}
 
       - name: "Run ruff lint"
-        uses: astral-sh/ruff-action@f2e32211077f40bfeab40e16285216924ebea4cb  # v2
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89  # v4.1.0
 
       - name: "Verify code formatting"
-        uses: astral-sh/ruff-action@f2e32211077f40bfeab40e16285216924ebea4cb  # v2
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89  # v4.1.0
         with: {args: "format --check"}
 
   # ── Stage 2: test suites (gated behind static-analysis) ────────────────
@@ -80,7 +80,7 @@ jobs:
       EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
       EMBEDDING_API_VERSION: ${{ secrets.EMBEDDING_API_VERSION }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v4
         name: "Clone M-Flow repository"
         with: {fetch-depth: 0}
 
@@ -109,7 +109,7 @@ jobs:
       EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
       EMBEDDING_API_VERSION: ${{ secrets.EMBEDDING_API_VERSION }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v4
         name: "Clone M-Flow repository"
         with: {fetch-depth: 0}
 
@@ -140,7 +140,7 @@ jobs:
       EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
       EMBEDDING_API_VERSION: ${{ secrets.EMBEDDING_API_VERSION }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v4
         name: "Clone M-Flow repository"
         with: {fetch-depth: 0}
 
@@ -175,7 +175,7 @@ jobs:
       EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
       EMBEDDING_API_VERSION: ${{ secrets.EMBEDDING_API_VERSION }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v4
         name: "Clone M-Flow repository"
         with: {fetch-depth: 0}
 
